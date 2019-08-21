@@ -1,0 +1,11 @@
+
++--------- V1.0.0 --------------------+
+2019-01-01
+  1. 修改 struct ntp_control, 增加成员变量 skew_set(when time skew >skew_set ms, set time)
+  2. 修改 rfc1305print(), 将
+	if (ntpc->set_clock) {
+	改为:
+	if (ntpc->set_clock||abs(skew1-skew2)/2>ntpc->skew_set*1000) {
+  3. 命令行输入选项增加 '-k', 用于设定 skew_set.
+
+ 

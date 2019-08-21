@@ -1,0 +1,16 @@
+#!/bin/sh
+
+BUILD_CFG=`pwd | sed -e 's:/.*/build/::'`
+OS_TYPE=`echo ${BUILD_CFG} | sed 's/^\(.\).*/\1/'`
+
+# Usage: cmake [options] <path-to-source> 
+# here, <path-to-source> is "../.." 
+if [ "$OS_TYPE" = "l" ]; then   #l is for unix/linux OS
+    echo "cmake -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=../toolchain-${BUILD_CFG}.cmake ../.."
+    cmake -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=../toolchain-${BUILD_CFG}.cmake ../..
+elif [ "$OS_TYPE" = "w" -o "$OS_TYPE" = "x" ]; then   #w or x is for Windows OS w64/w32/x86
+    echo "cmake -G "MSYS Makefiles" -DCMAKE_TOOLCHAIN_FILE=../toolchain-${BUILD_CFG}.cmake ../.."
+    cmake -G "MSYS Makefiles" -DCMAKE_TOOLCHAIN_FILE=../toolchain-${BUILD_CFG}.cmake ../..
+else
+    echo "Not support type!"
+fi

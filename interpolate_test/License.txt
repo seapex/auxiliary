@@ -1,0 +1,133 @@
+UserManage License Agreement
+
+BOYUU ELECTRIC USERMANAGE VERSION 1 END-USER LICENSE AGREEMENT
+
+IMPORTANT-READ CAREFULLY: This UserManage End-User License Agreement 
+("EULA") is a legal agreement between you (either an individual or a single 
+entity) and Boyuu Electric, Inc. for the Boyuu Electric SOFTWARE 
+identified above, which includes the User Manual, any associated SOFTWARE 
+components, any media, any printed materials other than the User Manual, 
+and any "online" or electronic documentation ("SOFTWARE"). By installing, 
+copying, or otherwise using the SOFTWARE, you agree to be bound by the 
+terms of this EULA.  If you do not agree to the terms of this EULA, do not 
+install or use the SOFTWARE.
+
+1. GRANT OF LICENSE.
+
+(a)	Evaluation Copy.  You may use the SOFTWARE without charge on an 
+evaluation basis for thirty (30) days from the day that you install the 
+SOFTWARE.  You must pay the license fee and register your copy to continue 
+to use the SOFTWARE after the thirty (30) days.  If you continue to use 
+the SOFTWARE after the thirty (30) days without paying the license fee you 
+will be using the SOFTWARE on an unlicensed basis.   
+
+
+(b)	Redistribution of Evaluation Copy.  If you are using SOFTWARE on an 
+evaluation basis you may make copies of the evaluation SOFTWARE as you wish; 
+give exact copies of the original evaluation SOFTWARE to anyone; and 
+distribute the evaluation SOFTWARE in its unmodified form via electronic 
+means (Internet, BBS's, Shareware distribution libraries, CD-ROMs, etc.).  
+You may not charge any fee for the copy or use of the evaluation SOFTWARE 
+itself, but you may charge a distribution fee that is reasonably related 
+to any cost you incur distributing the evaluation SOFTWARE (e.g. packaging).  
+You must not represent in any way that you are selling the SOFTWARE 
+itself.  Your distribution of the evaluation SOFTWARE will not entitle you 
+to any compensation from Boyuu Electric.  You must distribute a copy of 
+this EULA with any copy of the SOFTWARE and anyone to whom you distribute 
+the SOFTWARE is subject to this EULA.
+
+
+(c)	Registered Copy.  After you have purchased the license for SOFTWARE, 
+and have received the serial number enabling the registered copy, you are 
+licensed to copy the SOFTWARE only into the memory of the number of 
+computers corresponding to the number of licenses purchased.  The primary 
+user of the computer on which each licensed copy of the SOFTWARE is 
+installed may make a second copy for his or her exclusive use on a 
+portable computer.  Under no other circumstances may the SOFTWARE be 
+operated at the same time on more than the number of computers for which 
+you have paid a separate license fee.  You may not duplicate the SOFTWARE 
+in whole or in part, except that you may make one copy of the SOFTWARE for 
+backup or archival purposes.  You may terminate this license at any time 
+by destroying the original and all copies of the SOFTWARE in whatever form.  
+You may permanently transfer all of your rights under this EULA 
+provided you transfer all copies of the SOFTWARE (including copies of all 
+prior versions if the SOFTWARE is an upgrade) and retain none, and the 
+recipient agrees to the terms of this EULA.
+
+
+2. RESTRICTIONS.  You may not reverse engineer, de-compile, or disassemble 
+the SOFTWARE, except and only to the extent that such activity is 
+expressly permitted by applicable law notwithstanding this limitation.  
+You may not rent, lease, or lend the SOFTWARE.  You may permanently 
+transfer all of your rights under this EULA, provided the recipient agrees 
+to the terms of this EULA.  You may not publish or publicly distribute any 
+serial numbers, access codes, unlock-codes, passwords, or other end-user-
+specific registration information that would allow a third party to 
+activate the SOFTWARE without a valid license. 
+
+
+3. SUPPORT SERVICES.  Boyuu Electric may provide you with support 
+services related to the SOFTWARE.  Use of Support Services is governed by 
+the Boyuu Electric polices and programs described in the user manual, in 
+online documentation, and/or other Boyuu Electric-provided materials, as 
+they may be modified from time to time.  Any supplemental SOFTWARE code 
+provided to you as part of the Support Services shall be considered part 
+of the SOFTWARE and subject to the terms and conditions of this EULA.  
+
+
+4. TERMINATION. Without prejudice to any other rights, Boyuu Electric may 
+terminate this EULA if you fail to comply with the terms and conditions of 
+this EULA.  In such event, you must destroy all copies of the SOFTWARE.
+
+
+5. COPYRIGHT. The SOFTWARE is protected by China copyright law and 
+international treaty provisions.  You acknowledge that no title to the 
+intellectual property in the SOFTWARE is transferred to you.  You further 
+acknowledge that title and full ownership rights to the SOFTWARE will 
+remain the exclusive property of Boyuu Electric and you will not acquire 
+any rights to the SOFTWARE except as expressly set forth in this license.  
+You agree that any copies of the SOFTWARE will contain the same 
+proprietary notices which appear on and in the SOFTWARE.
+
+
+6. EXPORT RESTRICTIONS.  You agree that you will not export or re-export 
+the SOFTWARE to any country, person, entity, or end user subject to U.S.A. 
+export restrictions.  Restricted countries currently include, but are not 
+necessarily limited to Cuba, Iran, Iraq, Libya, North Korea, Sudan, and 
+Syria.  You warrant and represent that neither the U.S.A. Bureau of Export 
+Administration nor any other federal agency has suspended, revoked or 
+denied your export privileges.
+
+
+7.  LIMITED WARRANTY.  Boyuu Electric, Inc. warrants that the Software 
+will perform substantially in accordance with the accompanying written 
+materials for a period of 90 days from the date of your receipt of the 
+Software.  Any implied warranties on the Software are limited to 90 days.  
+Some states do not allow limitations on duration of an implied warranty, 
+so the above limitation may not apply to you.  Boyuu Electric, INC. 
+DISCLAIMS ALL OTHER WARRANTIES, EITHER EXPRESS OR IMPLIED, INCLUDING BUT 
+NOT LIMITED TO IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
+PARTICULAR PURPOSE, AND NON-INFRINGEMENT, WITH RESPECT TO THE SOFTWARE AND 
+THE ACCOMPANYING WRITTEN MATERIALS.  This limited warranty gives you 
+specific legal rights.  You may have others, which vary from state to state.
+
+
+8. LIMITATION OF LIABILITY. IN NO EVENT SHALL Boyuu Electric OR ITS 
+SUPPLIERS BE LIABLE TO YOU FOR ANY CONSEQUENTIAL, SPECIAL, INCIDENTAL, OR 
+INDIRECT DAMAGES OF ANY KIND ARISING OUT OF THE DELIVERY, PERFORMANCE, OR 
+USE OF THE SOFTWARE, EVEN IF Boyuu Electric HAS BEEN ADVISED OF THE 
+POSSIBILITY OF SUCH DAMAGES.  IN ANY EVENT, Boyuu Electric'S LIABILITY 
+FOR ANY CLAIM, WHETHER IN CONTRACT, TORT, OR ANY OTHER THEORY OF LIABILITY 
+WILL NOT EXCEED THE GREATER OF U.S.$1.00 OR LICENSE FEE PAID BY YOU.  
+
+
+9. MISCELLANEOUS. If you acquired the SOFTWARE in the China, this 
+EULA is governed by the laws of the China.  If you acquired 
+the SOFTWARE outside of the China, then local laws may apply.
+
+
+If you have any questions concerning this EULA or wish to contact Boyuu 
+Electric for any reason, please write: Boyuu Electric, Inc., A-1501, 
+Xijing Electrical Center, No.3, Dianzi Street(West), High-Tech Zone, 
+Xi'an City, Shaanxi Province, PRC; or call 029 87308775/6; or 
+send electronic mail to support@boyuu.com.cn.

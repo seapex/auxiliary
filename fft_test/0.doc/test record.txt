@@ -1,0 +1,23 @@
+每次测10轮，每轮5个循环. unit:ms
+
+FFTBase2Sea    avg=216.76, max=223.42, min=213.77
+FFTBase2Sea    avg=220.58, max=226.03, min=218.77
+
+FFTBase2Sea(double-->float)  avg=142.20, max=148.57, min=140.83
+                            avg=141.31, max=146.66, min=139.54    
+                            avg=141.11, max=145.44, min=139.55 
+
+FFTBase2Sea(/1024)  avg=149.51, max=156.71, min=147.43
+DSPF_sp_cfftr2_dit(/1024)  avg=222.83, max=228.75, min=220.55
+
+FFTBase2Sea(x86)  avg=  3.79, max=  9.00, min=  2.35
+DSPF_sp_cfftr2_dit(x86)  avg=  5.73, max= 11.61, min=  2.34
+
+FFTBase2Sea(随机值)         avg=160.77, max=167.94, min=159.41
+DSPF_sp_cfftr2_dit(随机值)  avg=238.93, max=243.99, min=236.25
+FFTBase2Sea(随机值)         avg=161.68, max=168.48, min=159.49
+DSPF_sp_cfftr2_dit(随机值)  avg=238.61, max=244.67, min=236.56
+
+在 arm 上实现 fft 运算约需 168.48ms/1s = 16.8% CPU，保守估计不会超过20%
+
+计算速度与输入数据相关，全零数据的计算速度较快！
