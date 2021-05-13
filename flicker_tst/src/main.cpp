@@ -30,15 +30,6 @@ const SquarePara sqr_par_[] = {
     {0.91666667, 0.725},    // 110/2min
     {13.5,       0.402},    // 1620/2min
     {33.3333333, 2.4  },    // 4000/2min
-/*
-    {0.00833333, 27.24},    // 1/2min
-    {0.01666667, 22.11},    // 2/2min
-    {0.05833333, 14.59},    // 7/2min
-    {0.325,      09.06},    // 39/2min
-    {0.91666667, 7.25},    // 110/2min
-    {13.5,       4.02},    // 1620/2min
-    {33.3333333, 24  },    // 4000/2min
-    */
 };
 int sqr_type_ = 0;
 int smpl_rate_;
@@ -78,7 +69,7 @@ void Initialize(int srt, float val)
 Simulative Pst data wave generator
 
     Input:  num -- number of sampling point will be generated
-            chl -- channel.0-3
+            chl -- channel. 0-3
             phs -- phase. 0-2:A-C
             amp -- amplitude
     Output: pbuf
@@ -122,11 +113,11 @@ void TestStatis(int val)
         avg[j]=0, max[j]=0, min[j]=9999999999;
         int loops = 10;
         for (int m=0; m<loops; m++) {
-            StopWatch (0, 1, NULL);
+            StopWatch (0, 1, "pst statis:");
             for (int i=0; i<val; i++) {
                 flkr_statis_->GetPst(0);
             }
-            StopWatch (0, 0, "pst statis:");
+            StopWatch (0, 0, NULL);
             float dur = stopwatch_dur(0);
             if (dur>max[j]) max[j] = dur;
             if (dur<min[j]) min[j] = dur;
@@ -148,7 +139,7 @@ void TestSpeed(int val, int phs, int type)
     float *data = new float[nums];
     float *buf = new float[nums];
     PstWaveGen(wave, nums, 0, phs, 100000);
-    StopWatch (0, 1, NULL);
+    StopWatch (0, 1, "test speed:");
     for (int i=0; i<val; i++) {
         for (int j=0; j<rounds; j++) {
             for (int k=0; k<nums; k++) {
@@ -160,7 +151,7 @@ void TestSpeed(int val, int phs, int type)
         }
         pst_[i%10] = flkr_statis_->GetPst(phs);
     }
-    StopWatch (0, 0, "test speed:");
+    StopWatch (0, 0, NULL);
     delete [] wave;
     delete [] buf;
     delete [] data;
@@ -175,7 +166,7 @@ void TestAccuracy(int val, int phs, int type)
     int32_t *wave = new int32_t[nums];
     float *data = new float[nums];
     float *buf = new float[nums];
-    StopWatch (0, 1, NULL);
+    StopWatch (0, 1, "accuracy:");
     for (int i=0; i<val; i++) {
         if (i%10==0) pst_x_[0][phs] = 0;
         for (int j=0; j<rounds; j++) {
@@ -190,7 +181,7 @@ void TestAccuracy(int val, int phs, int type)
         pst_[i%10] = flkr_statis_->GetPst(phs);
         printf("%6.3f \n", pst_[i%10]);
     }
-    StopWatch (0, 0, "accuracy:");
+    StopWatch (0, 0, NULL);
     delete [] wave;
     delete [] buf;
     delete [] data;
@@ -203,7 +194,7 @@ int main (int argc, char *argv[])
     int cmd = parse_opt.Parse(argc, argv);
     if (cmd<kSpeedTst) return 0;
         
-    Initialize(PstSR1600Hz, 1000);
+    Initialize(PstSR400Hz, 100);
     if (cmd==kSpeedTst) {
         for (int i=0; i<7; i++) {
             TestSpeed(12, 0, i);   //4channel * 3phase = 12

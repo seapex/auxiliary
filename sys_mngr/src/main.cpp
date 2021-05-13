@@ -8,6 +8,9 @@
 #include "socket_client.h"
 #include "time_cst.h"
 #include "config.h"
+#include "data_bufs.h"
+#include "phy_prtcl.h"
+#include "app_prtcl.h"
 //#include "data_buf.h"
 
 /*!
@@ -18,42 +21,40 @@ Send system control command
 void SystemCtrl(int type)
 {
     const int CNNCT_MAX = 2;
-    TimeCstInit();
-    messageq_guic().InitQGui(CNNCT_MAX);
-    g_data_buf = new DataBuf*[CNNCT_MAX];
-    memset(g_data_buf, 0, sizeof(DataBuf*)*CNNCT_MAX);
-    
+    messageq_guic().InitQueue(CNNCT_MAX);
+    data_bufs().Initialize(CNNCT_MAX);
     SocketClient *sock = new SocketClient(CNNCT_MAX);
-    int ass_idx = sock->sock_idx();
     
-    for (int i=0; ; i++) {
-        int idx = sock->Start("/tmp/sockgui", NULL, 0, 3, ass_idx);
-        if (idx>=0) {
-            ass_idx = idx;
-            //data_buf_ = g_data_buf[ass_idx];
-            break;
-        }
-        if (i>=2) {
-            printf("Connect to service failure!\n");
-            return;
-        }
-        msSleep(2000);
+    int ass_idx = sock->RegistIdx();
+    if (ass_idx < 0) {
+        printf("Register communication object index(%d) failure!\n", ass_idx);
+        return;
     }
+    data_bufs().new_buf(ass_idx);
+    if (sock->Start("/tmp/sockgui", NULL, kPhyPrtclPqB, kAppPrtclGuiC, ass_idx) < 0) {
+        printf("socket start /tmp/sockgui failed!\n");
+        return;
+    }
+    DataBuf *data_buf = data_bufs().buf(ass_idx);
+    data_buf->set_sysctl_rsp(251, kCtrlSystemCtl);
     messageq_guic().PushCtrlSig(ass_idx, kCtrlSystemCtl, type);
-    for (int i=0; i<10; i++) {
-        if (sock->Run(100)) break;
+    int i;
+    for (i=0; i<50; i++) {
+        sock->Run(100);
+        if (data_buf->sysctl_rsp(kCtrlSystemCtl)!=251) break; 
     }
+    if (i==50) printf("Command sending failed!!\n");
     delete sock;
-    delete [] g_data_buf;
+    msSleep(1000);
 }
 
-enum CmdType {kDefault, kMnQuit=1, kMnColdboot, kMnReboot, kWTDClose, kForceBoot, kUnknown};
+enum CmdType {kDefault, kMnQuit=1, kMnColdboot, kUpdate, kMnReboot, kWTDClose, kForceBoot, kUnknown};
 int main(int argc, char *argv[])
 {
     int cmd=kDefault;
     if (argc<2) {
         printf("version:%d.%d.%d\n", _VERSION_MAJOR, _VERSION_MINOR, _VERSION_PATCH);
-        printf("Usage: %s [ wtd_close | quit | reboot | coldboot | forceboot ]\n", argv[0]);
+        printf("Usage: %s [ wtd_close | quit | reboot | coldboot | forceboot | update]\n", argv[0]);
         return 0;
     }
     if (strcmp(argv[1], "wtd_close")==0) {
@@ -66,17 +67,21 @@ int main(int argc, char *argv[])
         cmd = kMnReboot;
     } else if (strcmp(argv[1], "forceboot")==0) {
         cmd = kMnReboot;
+    } else if (strcmp(argv[1], "update")==0) {
+        cmd = kUpdate;
     } else {
         printf("Unknown command!!\n");
         return 0;
     }
 
+    TimeCstInit();
     switch (cmd) {
         case kWTDClose:
             watchdog().Disable();
             break;
         case kMnQuit:
         case kMnColdboot:
+        case kUpdate:
             SystemCtrl(cmd);
             break;
         case kMnReboot:
@@ -90,6 +95,7 @@ int main(int argc, char *argv[])
         default:
             break;
     }
+    TimeCstEnd();
 }
 
 

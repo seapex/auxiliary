@@ -1,0 +1,194 @@
+/*! \file flicker_meas.cpp
+    \brief flicker measurement.
+*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+#include "flicker_statis.h"
+
+#ifdef PST_UINT32_T
+    static uint32_t *avrgin_[3];   //Average instantaneous flicker value buffer
+    static uint32_t *pst_buf_;     //buffer for pst statistics
+#else
+    static float *avrgin_[3];  //Average instantaneous flicker value buffer
+    static float *pst_buf_;     //buffer for pst statistics
+#endif
+
+static int tol_avrg_;      //Total number of average instantaneous flicker value for Pst statistics
+static int pinsert_[3];    //The position where the new value will be inserted
+static float pst_[3];
+
+int flk_statis_tol_avrg() { return tol_avrg_; }
+static const int kSmpMthd = 2;  //sampling method. Sample every kSmpMthd
+
+/*!
+    Input:  tol -- Total number of instantaneous flicker value for Pst statistics
+*/
+void IniFlickerStatis(int tol)
+{
+    tol_avrg_ = tol / kSmpMthd;
+    int i;
+    
+#ifdef PST_UINT32_T
+    for (i=0; i<3; i++) {
+        avrgin_[i] = malloc(sizeof(uint32_t)*tol_avrg_);
+    }
+    pst_buf_ = malloc(sizeof(uint32_t)*tol_avrg_);
+#else
+    for (i=0; i<3; i++) {
+        avrgin_[i] = malloc(sizeof(float)*tol_avrg_);
+    }
+    pst_buf_ = malloc(sizeof(float)*tol_avrg_);
+#endif
+    memset(pinsert_, 0, sizeof(pinsert_));
+}
+
+void DeFlickerStatis()
+{
+    free(pst_buf_);
+    int i;
+    for (i=0; i<3; i++) {
+        free(avrgin_[i]);
+    }
+}
+
+/*!
+Set average instantaneous flicker value
+
+    Input:  avrg -- Average instantaneous flicker value
+            phs -- phase. 0-2=A-C
+            cnt -- count of avrg.
+*/
+void SetAvrgIns(const float *avrg, int cnt, uint8_t phs)
+{
+    int p = pinsert_[phs];
+    int i;
+    cnt /= kSmpMthd;
+	if (p+cnt>tol_avrg_) {
+	    int k = tol_avrg_ - p;
+	    for (i=0; i<k; i++) {
+#ifdef PST_UINT32_T
+	        avrgin_[phs][p+i] = avrg[i*kSmpMthd]*10000;
+#else
+	        avrgin_[phs][p+i] = avrg[i*kSmpMthd];
+#endif
+	    }
+	    p = 0;
+	    cnt -= k;
+	    avrg += k;
+	}
+	for (i=0; i<cnt; i++) {
+#ifdef PST_UINT32_T
+	    avrgin_[phs][p+i] = avrg[i*kSmpMthd]*10000;
+#else
+	    avrgin_[phs][p+i] = avrg[i*kSmpMthd];
+#endif
+	}
+    pinsert_[phs] = p+cnt;
+}
+
+/*!
+Compare two integer
+
+    Input:  arg1,arg2 -- data be compared
+    Return: -1=(arg1<arg2), 0=(arg1==arg2), 1=(arg1>arg2)
+*/
+static int CompareInt ( const void *arg1, const void *arg2 )
+{
+    int a = * ( int *) arg1;
+    int b = * ( int *) arg2;
+    if ( a > b ) return 1;
+    else if ( a < b ) return -1;
+    else return 0;
+}
+
+/*!
+Compare two float
+
+    Input:  arg1,arg2 -- data be compared
+    Return: -1=(arg1<arg2), 0=(arg1==arg2), 1=(arg1>arg2)
+*/
+static int CompareFloat ( const void *arg1, const void *arg2 )
+{
+    float a = * ( float *) arg1;
+    float b = * ( float *) arg2;
+    if ( a > b ) return 1;
+    else if ( a < b ) return -1;
+    else return 0;
+}
+
+/*!
+Pst statistics
+
+    Input:  phs -- phase. 0-2=A-C
+    Return: Pst
+*/
+static float PstStatis(uint8_t phs)
+{
+	int tol = tol_avrg_;
+#ifdef PST_UINT32_T
+    memcpy(pst_buf_, avrgin_[phs], sizeof(uint32_t)*tol);
+    uint32_t *dp = pst_buf_;
+	qsort(dp, tol, sizeof(float), CompareInt);
+#else
+	memcpy(pst_buf_, avrgin_[phs], sizeof(float)*tol);
+	float *dp = pst_buf_;
+	qsort(dp, tol, sizeof(float), CompareFloat);
+#endif
+
+	float P01,P1,P3,P10,P50;
+	P01 = dp[tol*999/1000];
+	P1 = dp[tol*99/100];
+	P3 =  dp[tol*97/100];
+	P10 = dp[tol*9/10];
+	P50 = dp[tol/2];
+
+	float K01,K1,K3,K10,K50;
+	K01 = 0.0314; K1 = 0.0525;
+	K3 = 0.0657; K10 = 0.28;
+	K50 = 0.08;
+	
+#ifdef PST_UINT32_T
+	return sqrt(K01*P01+K1*P1+K3*P3+K10*P10+K50*P50)/100;
+#else
+	return sqrt(K01*P01+K1*P1+K3*P3+K10*P10+K50*P50);
+#endif
+}
+
+/*!
+Modify Pst accuracy
+
+    Input:  phs -- phase. 0-2=A-C
+*/
+static void ModifyPst(int phs)
+{
+	if(pst_[phs]>0.93){
+		pst_[phs] += 0.02;
+	}
+	if(pst_[phs]>1.9){
+		pst_[phs] += 0.02;
+	}
+	if(pst_[phs]>2.9){
+		pst_[phs] += 0.02;
+	}
+	if(pst_[phs]>4.9){
+		pst_[phs] += 0.02;
+	}
+}
+
+/*!
+Get Pst result
+
+    Input:	phs -- 相别;
+            mdfy -- 是否修正,1=修正
+    Return:	Pst计算结果
+*/
+float GetPst(short phs, short mdfy)
+{
+	pst_[phs] = PstStatis(phs);
+	if(mdfy) ModifyPst(phs);
+	return pst_[phs];
+}
+

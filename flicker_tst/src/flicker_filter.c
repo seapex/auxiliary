@@ -50,7 +50,7 @@ typedef struct {
 DC filter parameter
 */
 typedef struct {
-    int cnt;    //Count of sampling points in 1s
+    int cnt;    //Count of SV in 1s
     float bf;  //dc voltage before square in 1s
 	float bfs[20]; //For calculate dc voltage before square
 	float bfavg;   //The average of bfs[20]
@@ -87,7 +87,7 @@ int avg_num_flicker() { return avg_num_; }
 Preprocessing before filter
 
     Input:  src --
-            cnt -- Number of sampling points of src
+            cnt -- Number of SV of src
             dc -- DC filter parameter
     Output: des --
 */
@@ -100,7 +100,7 @@ void PreFilter(float *des, const float *src, int cnt, DCFltrTmpVar *dc)
     if ((dc->cnt+cnt)>=smpl_rate_) {
         n = smpl_rate_ - dc->cnt;
 
-        //¼ÆËãÆ½·½Ç°µÄÆ½¾ùÖ±Á÷·ÖÁ¿
+        //è®¡ç®—å¹³æ–¹å‰çš„å¹³å‡ç›´æµåˆ†é‡
         for(i = 0; i < n; i++) {
             dc->bf += src[i];
         }
@@ -109,23 +109,23 @@ void PreFilter(float *des, const float *src, int cnt, DCFltrTmpVar *dc)
         pos++;
         dc->pbf = pos>=20?0:pos;
         d1 = 0;
-        for (i = 0; i < 20; i++) {  // Ö±Á÷·ÖÁ¿Æ½¾ùÖµ
+        for (i = 0; i < 20; i++) {  // ç›´æµåˆ†é‡å¹³å‡å€¼
             d1 +=  dc->bfs[i];
         }
         dc->bfavg = d1/i;
         dc->bf = 0;
-        //¼ÆËãÆ½·½ºóµÄÆ½¾ùÖ±Á÷·ÖÁ¿
+        //è®¡ç®—å¹³æ–¹åçš„å¹³å‡ç›´æµåˆ†é‡
         for(i = 0; i < n; i++) {
-            des[i] = src[i] - dc->bfavg;  // µ±Ç°²¨¶¯Êı¾İ¼õÈ¥Ò»¸öÖ±Á÷·ÖÁ¿
+            des[i] = src[i] - dc->bfavg;  // å½“å‰æ³¢åŠ¨æ•°æ®å‡å»ä¸€ä¸ªç›´æµåˆ†é‡
             des[i] *= des[i];
             dc->aft += des[i];
         }
         pos = dc->paft;
-        dc->afts[pos] = dc->aft/smpl_rate_;   // Æ½·½ºÍµÄÆ½¾ùÖµ in 1s
+        dc->afts[pos] = dc->aft/smpl_rate_;   // å¹³æ–¹å’Œçš„å¹³å‡å€¼ in 1s
         pos++;
         dc->paft = pos>=180? 0:pos;
         d1 = 0;
-        for (i = 0; i < 180; i++) { // Æ½·½ºóÖ±Á÷·ÖÁ¿µÄÆ½¾ùÖµ
+        for (i = 0; i < 180; i++) { // å¹³æ–¹åç›´æµåˆ†é‡çš„å¹³å‡å€¼
             d1 +=  dc->afts[i];
         }
         dc->aftavg = d1/i;
@@ -137,13 +137,13 @@ void PreFilter(float *des, const float *src, int cnt, DCFltrTmpVar *dc)
         dc->bf += src[i];
     }
     for(i = n; i < cnt; i++) {
-        des[i] = src[i] - dc->bfavg;  // µ±Ç°²¨¶¯Êı¾İ¼õÈ¥Ò»¸öÖ±Á÷·ÖÁ¿
+        des[i] = src[i] - dc->bfavg;  // å½“å‰æ³¢åŠ¨æ•°æ®å‡å»ä¸€ä¸ªç›´æµåˆ†é‡
         des[i] *= des[i];
         dc->aft += des[i];
     }
     dc->cnt += (cnt-n);
 
-    //ÌáÈ¡³öµ÷ÖÆ²¨µÄÏà¶Ô²¨¶¯, Ïû³ıÔØ²¨·ùÖµ¶Ô×îÖÕ½á¹ûµÄÓ°Ïì¡£
+    //æå–å‡ºè°ƒåˆ¶æ³¢çš„ç›¸å¯¹æ³¢åŠ¨, æ¶ˆé™¤è½½æ³¢å¹…å€¼å¯¹æœ€ç»ˆç»“æœçš„å½±å“ã€‚
     d1 = dc->aftavg;
     if (d1>0) {
         for(i = 0; i < cnt; i++) {
@@ -158,7 +158,7 @@ void PreFilter(float *des, const float *src, int cnt, DCFltrTmpVar *dc)
 0.05Hz~35Hz bandpass filter
 
     Input:  src --
-            cnt -- Number of sampling points of src
+            cnt -- Number of SV of src
             tvr -- temp variable for bandpass filter
     Output: des --
 */
@@ -168,13 +168,13 @@ void BandPsFilter(float *des, const float *src, int cnt, BandTmpVar *tvr)
 
 #pragma MUST_ITERATE(8);
     for(i = 0; i < cnt; i++) {
-        //Ò»½×¸ßÍ¨ÂË²¨(0.05Hz)
+        //ä¸€é˜¶é«˜é€šæ»¤æ³¢(0.05Hz)
         /*tvr->xh[0] = tvr->xh[1];
         tvr->xh[1] = src[i];    //tvr->y[6];
         tvr->yh[0] = tvr->yh[1];
         tvr->yh[1] = band_c_.ah*(tvr->xh[1]-tvr->xh[0]) - band_c_.bh*tvr->yh[0];
         */
-        // Áù½×°ÍÌØÎÖË¹µÍÍ¨ÂË²¨(35Hz)
+        // å…­é˜¶å·´ç‰¹æ²ƒæ–¯ä½é€šæ»¤æ³¢(35Hz)
         tvr->x[0] = tvr->x[1];
         tvr->x[1] = tvr->x[2];
         tvr->x[2] = tvr->x[3];
@@ -202,7 +202,7 @@ void BandPsFilter(float *des, const float *src, int cnt, BandTmpVar *tvr)
                     - band_c_.b[5] * tvr->y[1]
                     - band_c_.b[6] * tvr->y[0];
 
-        //Ò»½×¸ßÍ¨ÂË²¨(0.05Hz)
+        //ä¸€é˜¶é«˜é€šæ»¤æ³¢(0.05Hz)
         tvr->xh[0] = tvr->xh[1];
         tvr->xh[1] = tvr->y[6];
         tvr->yh[0] = tvr->yh[1];
@@ -215,7 +215,7 @@ void BandPsFilter(float *des, const float *src, int cnt, BandTmpVar *tvr)
 RC lowpass filter
 
     Input:  src --
-            cnt -- Number of sampling points of src
+            cnt -- Number of SV of src
             tvr -- temp variable for RC lowpass filter
     Output: des --
 */
@@ -237,7 +237,7 @@ void RCLowPsFilter(float *des, const float *src, int cnt, RCLowTmpVar *tvr)
 Visual sensitivity filter
 
     Input:  src --
-            cnt -- Number of sampling points of src
+            cnt -- Number of SV of src
             tvr -- temp variable for sens filter
     Output: des --
 */
@@ -274,7 +274,7 @@ void SensFilter(float *des, const float *src, int cnt, SensTmpVar *tvr)
 Flicker filter
 
     Input:  src -- sampling value
-            cnt -- Number of sampling points of src
+            cnt -- Number of SV of src
             cdx -- channel index. 0-
             phs -- phase, 0~2=A~C
     Output: des -- Average instantaneous flicker value
@@ -331,7 +331,7 @@ void IniFilterPar(int rate, float val)
 			band_c_.b[5] = -2.444865;   band_c_.b[6] = 0.3465408;
 			band_c_.ah = 0.9998;        band_c_.bh = -0.99961;
     		sens_c_.a[0] = 0.00259963;  sens_c_.a[1] = 0.0000461345;
-	    	sens_c_.a[2] = 0.00515313;  sens_c_.a[3] = -0.0000461345;
+	    	sens_c_.a[2] = -0.00515313;  sens_c_.a[3] = -0.0000461345;
 		    sens_c_.a[4] = 0.0025535;
     		sens_c_.b[1] = -3.765314;   sens_c_.b[2] = 5.313669;
 	    	sens_c_.b[3] = -3.330456;   sens_c_.b[4] = 0.7821078;
@@ -358,19 +358,19 @@ void IniFilterPar(int rate, float val)
 		    smpl_rate_ = 1600;
             break;
         case PstSR2560Hz:
-			band_c_.a[0] = band_c_.a[6] = 4.72720485e-9;
-			band_c_.a[1] = band_c_.a[5] = 2.83632291e-8;
-			band_c_.a[2] = band_c_.a[4] = 7.09080728e-8;
-			band_c_.a[3] = 9.45440971e-8;
-			band_c_.b[1] = -5.67492833; band_c_.b[2] = 13.4270495;
-			band_c_.b[3] = -16.9536067; band_c_.b[4] = 12.0481609;
-			band_c_.b[5] = -4.56904318; band_c_.b[6] = 0.72236816;
+			band_c_.a[0] = band_c_.a[6] = 5.318723435e-9;
+			band_c_.a[1] = band_c_.a[5] = 3.191234061e-8;
+			band_c_.a[2] = band_c_.a[4] = 7.978085152e-8;
+			band_c_.a[3] = 1.063744687e-7;
+			band_c_.b[1] = -5.668303216; band_c_.b[2] = 13.39607301;
+			band_c_.b[3] = -16.89562353; band_c_.b[4] = 11.99384858;
+			band_c_.b[5] = -4.543586172; band_c_.b[6] = 0.7175916763;
 			band_c_.ah = 0.99994;       band_c_.bh = -0.99988;
-    		sens_c_.a[0] = 0.000273850727;  sens_c_.a[1] = 1.52804205e-6;
-	    	sens_c_.a[2] = -0.000546173412; sens_c_.a[3] = -1.52804205e-6;
-		    sens_c_.a[4] = 0.000272322685;
-    		sens_c_.b[1] = -3.9244238;      sens_c_.b[2] = 5.7750481;
-	    	sens_c_.b[3] = -3.7767939;      sens_c_.b[4] = 0.9261697;
+    		sens_c_.a[0] = 0.0002738507269;  sens_c_.a[1] = 1.528042052e-6;
+	    	sens_c_.a[2] = -0.0005461734118; sens_c_.a[3] = -1.528042052e-6;
+		    sens_c_.a[4] = 0.0002723226849;
+    		sens_c_.b[1] = -3.924423823;      sens_c_.b[2] = 5.775048124;
+	    	sens_c_.b[3] = -3.776793934;      sens_c_.b[4] = 0.9261697117;
 		    rclo_c_.a = 0.00065062; rclo_c_.b = -0.9987;   rclo_c_.K = 124;
 		    avg_num_ = 80;
 		    smpl_rate_ = 2560;
@@ -389,9 +389,9 @@ void IniFilterPar(int rate, float val)
 		    sens_c_.a[4] = 0.00898483;
     		sens_c_.b[1] = -3.548754;   sens_c_.b[2] = 4.714548;
 	    	sens_c_.b[3] = -2.776010;   sens_c_.b[4] = 0.610325;
-		    rclo_c_.a = 0.00415;    rclo_c_.b = -0.99170;  rclo_c_.K = 2;
+		    rclo_c_.a = 0.00415;    rclo_c_.b = -0.99170;  rclo_c_.K = 124;
 		    avg_num_ = 20;
-		    smpl_rate_ = 1600;
+		    smpl_rate_ = 400;
             break;
     }
     
@@ -399,6 +399,8 @@ void IniFilterPar(int rate, float val)
     memset(sens_v_, 0, sizeof(sens_v_));
     memset(rclo_v_, 0, sizeof(rclo_v_));
     memset(&dcf_v_[0][0], 0, sizeof(DCFltrTmpVar));
+    if (!val) return;
+
     fi = val*val/2;
     for(i = 0; i < 180; i++) {
         dcf_v_[0][0].afts[i] = fi;

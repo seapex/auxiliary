@@ -39,3 +39,6 @@ tags.lst
 */build/*x86
 */build/w32
 */build/w64
+*.pdf
+*.jpg
+*.gif

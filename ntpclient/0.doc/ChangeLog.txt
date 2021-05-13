@@ -1,4 +1,12 @@
 
++--------- V1.0.1 --------------------+
+2019-12-07
+  1. 修改 rfc1305print(), 将
+	  if (ntpc->set_clock||abs(skew1-skew2)/2>ntpc->skew_set*1000) {
+	改为:
+	  if (ntpc->set_clock||fabs(skew1-skew2)/2>ntpc->skew_set*1000) {
+    解决 skew2(本地时间)>skew1(NTP时间)时, 不对时(不执行set_time)的问题.
+
 +--------- V1.0.0 --------------------+
 2019-01-01
   1. 修改 struct ntp_control, 增加成员变量 skew_set(when time skew >skew_set ms, set time)

@@ -4,11 +4,19 @@ right once, but keep it there.
 First, a note on typical 1990's and 2000's computer crystals.  They
 are truly pathetic.  A "real" crystal oscillator (TCXO) usually has
 an initial set error of less than 5 ppm, and variation over time, voltage,
-and temperature measured in tenths of a ppm (and an OCXO can reach Â±0.3 ppm
-stability over ten years and 85Â°C temperature swing).  The devices used
+and temperature measured in tenths of a ppm (and an OCXO can reach ±0.3 ppm
+stability over ten years and 85°C temperature swing).  The devices used
 in conventional PC motherboards and single board computers, however,
 often have initial set errors up to 150 ppm, and will vary 5 ppm over
 the course of a day-night cycle in a pseudo-air-conditioned space.
+
+[Operating system software can sometimes exacerbate the problem.  I
+have seen some i686 Red Hat 7.3 systems run the clock at 512 Hz, or 953
+microseconds per tick, giving a built in 64 ppm error.  Even the normally
+exemplary DEC Alpha has, when run with Linux, a truly awful calibration
+scheme; Linux runs it with a nominal ticks per second of 1024, which
+gives a tick value of 977, theoretical additional error -448 ppm, actual
+frequency observed -443.7 ppm.]
 
 Still, the pattern is clear: the first and largest error of a crystal
 is its initial set error.  I strongly urge the calibration of each computer,
@@ -33,7 +41,7 @@ bloat^H^H^H^H^Hextra features.  I include the code here for a standalone
 version; it is also incorporated into busybox (http://www.busybox.net),
 although you may have to select it at compile time, like any other component.
 
-Fortunately the core functions of the two adjtimex<p dir="ltr" style="margin-left: 20px; margin-right: 0px"></p>
+Fortunately (and not coincidentally) the core functions of the two adjtimex
 programs can be used interchangeably, as long as you only use the short option
 variant of the Dick/Van Zandt adjtimex.  The options discussed here are:
        -f    frequency (integer kernel units)

@@ -7,11 +7,12 @@ extern "C" {
 
 enum kPstSampleRate {PstSR400Hz, PstSR800Hz, PstSR1600Hz, PstSR2560Hz};
 
-//³õÊ¼»¯ÉÁ±äÂË²¨²ÎÊı
+//åˆå§‹åŒ–é—ªå˜æ»¤æ³¢å‚æ•°
 void IniFilterPar(int rate, float val);
-//ÉÁ±äÂË²¨£¬Êä³öÎª¾­¹ıÆ½¾ù´¦ÀíºóµÄË²Ê±ÉÁ±äÖµ
+//é—ªå˜æ»¤æ³¢ï¼Œè¾“å‡ºä¸ºç»è¿‡å¹³å‡å¤„ç†åçš„ç¬æ—¶é—ªå˜å€¼
 int FlickerFilter(float *des, const float *src, int cnt, int cdx, int phs);
 int avg_num_flicker();
+//int avg_num_flicker();
 #ifdef __cplusplus
 }
 #endif

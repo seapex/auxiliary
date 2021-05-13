@@ -18,4 +18,6 @@ SyncCycle=60
 FreqErr=1208595
 
 killall ntpclient
+# ./ntpclient -f $FreqErr -s -h $NTPHOST
+# ./ntpclient -l -i $SyncCycle -g 10000 -h $Addr >ntpclient.log
 ./ntpclient -f $FreqErr -s -l -i $SyncCycle -g 10000 -h $Addr >ntpclient.log
