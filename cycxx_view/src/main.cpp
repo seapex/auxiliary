@@ -45,7 +45,7 @@ void ShowHelp(int t)
             printf(" Usage: %s filename harm orders\n", app_name_);
             break;
         default:
-            printf(" Usage: %s filename\n", app_name_);
+            printf(" Usage: %s filename(*.150, *.ten or *.status)\n", app_name_);
             break;
     }
     printf("\n");
@@ -275,10 +275,7 @@ int main (int argc, char *argv[])
 {
     app_name_ = argv[0];
     if (argc < 2) {
-        printf("For cyc150:\n");
-        ShowHelp(2);
-        printf("For cyc10:\n");
-        ShowHelp(1);
+        ShowHelp(0);
         exit(1);
     }
 

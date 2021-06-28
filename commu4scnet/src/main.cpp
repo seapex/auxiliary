@@ -53,12 +53,15 @@ int main (int argc, char *argv[])
                 case kUpBoot:
                     commu.Upgrade(parse_opt.filename_cfg(), parse_opt.mac(1), cmd, parse_opt.force());
                     break;
+                case kDebug:
+                    commu.DebugCmd(parse_opt.dbgcmd(), parse_opt.mac(1));
                 default:
                     break;
             }
             break;
         case kBatchSet:
-            commu.BatchSet(parse_opt.chnl(), parse_opt.trns_rto(), parse_opt.bset_mac());
+            commu.BatchSet(parse_opt.scnet(), parse_opt.trns_rto(), parse_opt.bset_mac(), parse_opt.c1c2(), parse_opt.rllc());
+            parse_opt.clr_bset_par();
             break;
         default:
             return -1;

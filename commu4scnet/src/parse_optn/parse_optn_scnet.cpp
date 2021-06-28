@@ -15,7 +15,7 @@ const char *kCmdName[kCmdTypeEnd] = {
     MAIN_PROG, "batchset"};
 
 //main command
-static const char * main_sopts = "hVm:s:g:pu:b:f";
+static const char * main_sopts = "hVm:s:g:pu:b:fd:";
 static const option main_lopts[] = {
     { "help",       0, 0, 'h' },
     { "version",    0, 0, 'V' },
@@ -26,6 +26,7 @@ static const option main_lopts[] = {
     { "upgrade",    1, 0, 'u' },
     { "upboot",     1, 0, 'b' },
     { "force",      1, 0, 'f' },
+    { "debug",      1, 0, 'd' },
     { NULL,         0, 0, 0 },
 };
 static const char * main_help =
@@ -45,26 +46,34 @@ static const char * main_help =
     "       -b UP_FILE, --upboot=UP_FILE\n"
     "                       Upgrade bootloader firmware\n"
     "       -f, --force     Forced to upgrade\n"
+    "       -d n, --debug=n\n"
+    "                       Debug command. n=0-255\n"
     "\nThe "MAIN_PROG" commands are:\n"
     "   batchset     Batch set the parameters of several devices\n"
     "\nSee '"MAIN_PROG" help <command>' for help information on a specific command.\n";
 
 //batchset command
-static const char *bset_sopts = "c:r:m:";
+static const char *bset_sopts = "c:r:m:C:R:";
 static const option bset_lopts[] = {
     { "chnnlx",     1, 0, 'c' },
     { "ratio",      1, 0, 'r' },
     { "mac",        1, 0, 'm' },
+    { "c1c2",       1, 0, 'C' },
+    { "rllc",       1, 0, 'R' },
     { NULL,         0, 0, 0 },
 };
 static const char * bset_help =
     "Usage: "MAIN_PROG" batchset [args] [mac address]\n"
-    "       -c, --chnnlx=hexnum\n"
-    "                       Channels to be set. bit0-3:channel1-4. 0=not, 1=set\n"
+    "       -c, --scnetx=hexnum\n"
+    "                       SCNetxxs to be set. bit0-3:SCNetxx1-4. 0=not, 1=set\n"
     "       -r, --ratiox=\"p,s p,s p,s p,s\"\n"
-    "                       PT or CT of channel1-4\n"
+    "                       PT or CT of SCNetxx1-4\n"
     "       -m, --mac=\"mac1 mac2 mac3 mac4\"\n"
-    "                      Lower 24 bits of the MAC address of channel1-4\n";
+    "                      Lower 24 bits of the MAC address of channel1-4\n"
+    "       -C, --c1c2=\"c1,c2 c1,c2 c1,c2\"\n"
+    "                      C1/C2 of PhaseA-C\n";
+    //"       -R, --rllc=x\n"
+    //"                      /Ratio of resistor impedance to capacitor reactance at 50Hz in RC parallel circute.\n";
     
 ParseOptnScnet::ParseOptnScnet()
 {
@@ -87,6 +96,7 @@ void ParseOptnScnet::InitParam()
     pfile_cfg_ = NULL;
     mac_cmd_ = 0;
     force_ = 0;
+    clr_bset_par();
 }
 
 /*!
@@ -132,6 +142,10 @@ int ParseOptnScnet::HandleMain(int opt, char *arg)
         case 'f':
             force_ = 1;
             break;
+        case 'd':
+            sscanf(optarg, "%hhd", &dbgcmd_);
+            mac_cmd_ = kDebug;
+            break;
         default:
             return PrintHelp();
     }
@@ -175,9 +189,9 @@ int ParseOptnScnet::HandleBset(int opt)
     switch (opt) {
         case 'c':
             sscanf(optarg, "%hhx", &ui);
-            memset(bset_par_.chnl, 0, sizeof(bset_par_.chnl));
+            memset(bset_par_.scnet, 0, sizeof(bset_par_.scnet));
             for (i=0; i<4; i++) {
-                if (ui>>i&1) bset_par_.chnl[i] = 1;
+                if (ui>>i&1) bset_par_.scnet[i] = 1;
             }
             break;
         case 'r':
@@ -189,6 +203,13 @@ int ParseOptnScnet::HandleBset(int opt)
             sscanf(optarg, "%hhx%*[:-]%hhx%*[:-]%hhx %hhx%*[:-]%hhx%*[:-]%hhx %hhx%*[:-]%hhx%*[:-]%hhx %hhx%*[:-]%hhx%*[:-]%hhx", 
                    &bset_par_.mac[0][0], &bset_par_.mac[0][1], &bset_par_.mac[0][2], &bset_par_.mac[1][0], &bset_par_.mac[1][1], &bset_par_.mac[1][2],
                    &bset_par_.mac[2][0], &bset_par_.mac[2][1], &bset_par_.mac[2][2], &bset_par_.mac[3][0], &bset_par_.mac[3][1], &bset_par_.mac[3][2]);
+            break;
+        case 'C':
+            sscanf(optarg, "%f,%f %f,%f %f,%f", &bset_par_.c1c2[0][0], &bset_par_.c1c2[0][1], 
+                   &bset_par_.c1c2[1][0], &bset_par_.c1c2[1][1], &bset_par_.c1c2[2][0], &bset_par_.c1c2[2][1]);
+            break;
+        case 'R':
+            sscanf(optarg, "%hd", &bset_par_.rllc);
             break;
         default:
             return PrintHelp(kCmdName[kBatchSet]);

@@ -19,10 +19,10 @@
 static const uint8_t kGroupMac[6] = {0xB1, 0xE0, 0x14, 0x03, 0x08, 0x01};
 static const uint8_t kBoyuuOUI[3] = {0xB0, 0xE0, 0x14};
 
-enum DeviceModel {PQNet103D, PQNet204D, PQNet202CVT, PQNet202E1, PQNet202E2, PQNet202Ex, PQNetxxx, DM_NoCard};
-enum ParamType {kFirmVer, kDevModel, kADCBkgrdDC, kCorrFactor, kPT_CT};
-static const char *kParamName[] = {"FirmwareVer", "DeviceModel", "ADCBackgroudDC[4]", "CorrectFactor[4]", "PT_CT[2]"};
-static const char *DeviceModelStr[] = {"PQNet103D", "PQNet204D", "PQNet202CVT", "PQNet202E1", "PQNet202E2", "PQNet202Ex", "PQNetxxx", "DM_NoCard"};
+enum DeviceModel {PQNet103D, PQNet204D, PQNet202CVT, PQNet202E1, PQNet202E2, PQNet101CVT, PQNet202Ex, PQNetxxx, DM_NoCard};
+enum ParamType {kFirmVer, kDevModel, kADCBkgrdDC, kCorrFactor, kPT_CT, kCVT_C1C2, kCVTllRes, kSVType, kParamTypeEnd};
+static const char *kParamName[] = {"FirmwareVer", "DeviceModel", "ADCBackgroudDC[4]", "CorrectFactor[4]", "PT_CT[2]", "C1/C2(uF)", "R//C", "SV type(p,s)"};
+static const char *DeviceModelStr[] = {"PQNet103D", "PQNet204D", "PQNet202CVT", "PQNet202E1", "PQNet202E2", "PQNet101CVT", "PQNet202Ex", "PQNetxxx", "DM_NoCard"};
 
 CommuForScnet::CommuForScnet()
 {
@@ -149,8 +149,17 @@ void CommuForScnet::SaveParam(const char *filename, Para4Scnet *par)
     }
     fprintf(fstrm, "%s=%6.4f,%6.4f,%6.4f,%6.4f\n", kParamName[kCorrFactor], fi[0], fi[1], fi[2], fi[3]);
     fprintf(fstrm, "%s=%d,%d\n", kParamName[kPT_CT], par->trns_rto[0], par->trns_rto[1]);
+    memcpy(fi, par->cvt_c1c2, sizeof(par->cvt_c1c2));
+    fprintf(fstrm, "%s=%f,%f\n", kParamName[kCVT_C1C2], fi[0], fi[1]);
+    fprintf(fstrm, "%s=%d\n", kParamName[kCVTllRes], par->cvt_prl_res);
+    char ps[2] = {'p', 's'};
+    fprintf(fstrm, "%s=%c\n", kParamName[kSVType], ps[par->svtyp&1]);
 
     fclose(fstrm);
+    
+    printf("dbg32[0-3]=%9d %9d %9d %9d\n", par->dbg32[0], par->dbg32[1], par->dbg32[2], par->dbg32[3]);
+    printf("debug[0-3]=%05d %05d %05d %05d\n", par->debug[0], par->debug[1], par->debug[2], par->debug[3]);
+    printf("debug[4-7]=%05d %05d %05d %05d\n", par->debug[4], par->debug[5], par->debug[6], par->debug[7]);
 }
 
 /*!
@@ -174,7 +183,7 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
         retv = fscanf(fstrm, "%[^:=]", par_name);
         if (retv==EOF) break;
         int i, j;
-        for (i=0; i<=kPT_CT; i++) {
+        for (i=0; i<kParamTypeEnd; i++) {
             if ( !strcmp(par_name, kParamName[i]) ) break;
         }
         //printf("%s i=%d\n", par_name, i);
@@ -193,31 +202,47 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
                 break;
             case kADCBkgrdDC:
                 fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%d,%d,%d,%d", &par->adc_dc[0], &par->adc_dc[1], &par->adc_dc[2], &par->adc_dc[3]);
+                sscanf(stri, "=%hd,%hd,%hd,%hd", &par->adc_dc[0], &par->adc_dc[1], &par->adc_dc[2], &par->adc_dc[3]);
                 break;
             case kCorrFactor:
                 fgets(stri, sizeof(stri), fstrm);
                 sscanf(stri, "=%f,%f,%f,%f", &fi[0], &fi[1], &fi[2], &fi[3]);
+                for (j=0; j<4; j++) {
+                    par->corr[j] = fi[j]*10000;
+                }
                 break;
             case kPT_CT:
                 fgets(stri, sizeof(stri), fstrm);
                 sscanf(stri, "=%d,%d", &par->trns_rto[0], &par->trns_rto[1]);
+                break;
+            case kCVT_C1C2:
+                fgets(stri, sizeof(stri), fstrm);
+                sscanf(stri, "=%f,%f", &fi[0], &fi[1]);
+                memcpy(par->cvt_c1c2, fi, sizeof(par->cvt_c1c2));
+                break;
+            case kCVTllRes:
+                fgets(stri, sizeof(stri), fstrm);
+                sscanf(stri, "=%hd", &par->cvt_prl_res);
+                break;
+            case kSVType:
+                fgets(stri, sizeof(stri), fstrm);
+                sscanf(stri, "=%c", &j);
+                par->svtyp = j=='s'?1:0;
                 break;
             default:
                 break;
         }
     }
     fclose(fstrm);
-    for (int i=0; i<4; i++) {
-        par->corr[i] = fi[i]*10000;
-    }
 
-#if 0
+#if 1
     printf("%s:%d.%d.%d\n", kParamName[kFirmVer], par->ver[0][0], par->ver[0][1], par->ver[0][2]);
     printf("%s=%s\n", kParamName[kDevModel], DeviceModelStr[par->dev_model]);
     printf("%s=%d,%d,%d,%d\n", kParamName[kADCBkgrdDC], par->adc_dc[0], par->adc_dc[1], par->adc_dc[2], par->adc_dc[3]);
     printf("%s=%d,%d,%d,%d\n", kParamName[kCorrFactor], par->corr[0], par->corr[1], par->corr[2], par->corr[3]);
     printf("%s=%d,%d\n", kParamName[kPT_CT], par->trns_rto[0], par->trns_rto[1]);
+    printf("%s=%d\n", kParamName[kCVTllRes], par->cvt_prl_res);
+    printf("%s=%d\n", kParamName[kSVType], par->svtyp);
 #endif
 
     return 0;
@@ -340,7 +365,7 @@ int CommuForScnet::SetParam(const char *filename, const uint8_t *mac)
         if (!retv) break;
         else printf("Set parameters failed!\n");
     } 
-    return retv;       
+    return retv;
 }
 
 /*!
@@ -559,26 +584,45 @@ int CommuForScnet::Upgrade(const char *filename, const uint8_t *mac, uint16_t cm
 /*!
 Batch set the parameters of several devices
 
-    Input:  chnl -- uint8_t[4]. [0-3]:channel1-4. 0=needn't set, 1=need set
-            ratio -- uint32_t[4][2]. [0-3]:channel1-4, [0-1]:primary,secondary. unit:V/A
+    Input:  scnet -- uint8_t[4]. [0-3]:channel1-4. 0=needn't set, 1=need set
+            ratio -- uint32_t[4][2]. [0-3]:channel1-4; [0-1]:primary,secondary. unit:V/A
+            mac -- uint8_t[4][3]. [0-3]:channel1-4; [0-2]:25-48bit of mac
+            c1c2 -- float[3][2]. [0-2]:A-C; [0-1]:C1,C2
+            rllc --
     Retrun: <0=failure
 */
-int CommuForScnet::BatchSet(const uint8_t *chnl, const uint32_t *ratio, const uint8_t *mac)
+int CommuForScnet::BatchSet(const uint8_t *scnet, const uint32_t *ratio, const uint8_t *mac, const float *c1c2, uint16_t rllc)
 {
     uint8_t scnet_mac[6] = {0xB0, 0xE0, 0x14};
     int retv = 0;
+    uint32_t cx[2];
     for (int i=0; i<4; i++) {
-        //printf("%d; %d:%d; %x-%x-%x\n", chnl[i], ratio[2*i], ratio[2*i+1], mac[3*i], mac[3*i+1], mac[3*i+2]);
+        //printf("%d; %d:%d; %x-%x-%x %f,%f %d\n", scnet[i], ratio[2*i], ratio[2*i+1], mac[3*i], mac[3*i+1], mac[3*i+2], c1c2[2*i], c1c2[2*i+1], rllc);
         int up = 0;
-        if (chnl[i]) {
+        if (scnet[i]) {
             memcpy(&scnet_mac[3], &mac[3*i], 3);
             retv = GetParam(NULL, scnet_mac);
             if (retv<0) continue;
             //printf("trns_rto=%d,%d\n", par4scnet_.trns_rto[0], par4scnet_.trns_rto[1]);
-            if ( memcmp(par4scnet_.trns_rto, &ratio[2*i], 8) ) {
-                memcpy(par4scnet_.trns_rto, &ratio[2*i], 8);
-                //printf("trns_rto=%d,%d\n", par4scnet_.trns_rto[0], par4scnet_.trns_rto[1]);
-                up++;
+            if ( ratio[2*i] && ratio[2*i+1] ) {
+                if ( memcmp(par4scnet_.trns_rto, &ratio[2*i], 8) ) {
+                    memcpy(par4scnet_.trns_rto, &ratio[2*i], 8);
+                    //printf("trns_rto=%d,%d\n", par4scnet_.trns_rto[0], par4scnet_.trns_rto[1]);
+                    up++;
+                }
+            }
+            if (i<3) {
+                if (c1c2[i*2] && c1c2[2*i+1]) {
+                    memcpy(cx, &c1c2[i*2], sizeof(cx));
+                    if ( memcmp(par4scnet_.cvt_c1c2, cx, 8) ) {
+                        memcpy(par4scnet_.cvt_c1c2, cx, 8);
+                        up++;
+                    }
+                }
+                if ( rllc && rllc != par4scnet_.cvt_prl_res ) {
+                    par4scnet_.cvt_prl_res = rllc;
+                    up++;
+                }
             }
             if (up) {
                 retv = SetParam(NULL, scnet_mac);
@@ -604,6 +648,14 @@ inline void CommuForScnet::SwapBytes(Para4Scnet *par, int type)
         }
         for (int i=0; i<2; i++) {
             par->trns_rto[i] = ntohl(par->trns_rto[i]);
+            par->cvt_c1c2[i] = ntohl(par->cvt_c1c2[i]);
+        }
+        par->cvt_prl_res = ntohs(par->cvt_prl_res);
+        for (int i=0; i<4; i++) {
+            par->dbg32[i] = ntohl(par->dbg32[i]);
+        }
+        for (int i=0; i<8; i++) {
+            par->debug[i] = ntohs(par->debug[i]);
         }
     } else {
         for (int i=0; i<4; i++) {
@@ -613,6 +665,62 @@ inline void CommuForScnet::SwapBytes(Para4Scnet *par, int type)
         }
         for (int i=0; i<2; i++) {
             par->trns_rto[i] = htonl(par->trns_rto[i]);
+            par->cvt_c1c2[i] = htonl(par->cvt_c1c2[i]);
         }
+        par->cvt_prl_res = htons(par->cvt_prl_res);
     }
 }
+
+/*!
+Send debug command
+
+    Input:  cmdn -- command number
+            mac -- The MAC address of the scnet
+    Return:  <0=failure
+*/
+int CommuForScnet::DebugCmd(uint8_t cmdn, const uint8_t *mac)
+{
+    if (CheckMacAddr(mac)) return -1;
+    
+    CrtlMacFrame tbuf;
+    memcpy(tbuf.desMac, mac, 6);
+    memcpy(tbuf.srcMac, src_mac_, 6);
+    tbuf.ethertype = htons(eth_type_);
+    tbuf.length = htons(44);
+    tbuf.cmd = htons(kDebug);
+    tbuf.res[0] = cmdn;
+    uint32_t crc = crc32(0, Z_NULL, 0);
+    uint8_t *pbuf = (uint8_t *)&tbuf;
+    crc = crc32(crc, pbuf, 60);
+    memcpy(&pbuf[60], &crc, 4);    
+
+    int retv = -1, i, cnt;
+    CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
+    for (i=0; i<3; i++) {
+        sendto(socket_fd_, &tbuf, 64, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
+        StopWatch(0, 1, NULL);
+        for (;;) {
+            cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
+            if(cnt>0) {
+                if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kDebug) {
+                    uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
+                    crc = crc32(0, Z_NULL, 0);
+                    if (fcs==crc32(crc, rx_buf_, cnt-4)) {
+                        StopWatch(0, 0, NULL);
+                        printf("Debug command send succeed >> %02X:%02X:%02X:%02X:%02X:%02X; time=%6.3fms\n", 
+                                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], stopwatch_dur(0)*1000);
+                        retv = 0;
+                        break;
+                    }
+                }
+            }
+            StopWatch(0, 0, NULL);
+            if (stopwatch_dur(0)>1) break;
+        }
+        if (!retv) break;
+        else printf("Debug command send failure!\n");
+    }
+    return retv;   
+}
+
+

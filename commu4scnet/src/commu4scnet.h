@@ -4,7 +4,7 @@
 #ifndef _COMMU4SCNET_H_
 #define _COMMU4SCNET_H_
 
-enum MacCmd { kSetMac=7, kSetPar, kGetPar, kMacPing, kUpApp, kUpBoot };
+enum MacCmd { kSetMac=7, kSetPar, kGetPar, kMacPing, kUpApp, kUpBoot, kDebug };
 
 class CommuForScnet {
     int socket_fd_; // Socket file description
@@ -18,8 +18,14 @@ class CommuForScnet {
         int16_t adc_dc[4];  //Backgroud DC component of ADC. [0-3]:A-C, N(only for current)
         int32_t corr[4];    //Accuracy correction factor. [0-3]:A-C, N(only for current). unit:1/10000
         uint32_t trns_rto[2];   //transformer ratio. [0-1]:PT1,PT2 unit:V or CT1, CT2 unit:A
-        uint8_t  reserve[86];
-        uint8_t  ver[2][3]; //firmware version. [0-1]:App,Bootloader
+        uint32_t cvt_c1c2[2];   //C1/C2 capacitance, unit:uF. Note! The actual data type is float.
+        uint16_t cvt_prl_res;   //Ratio of resistor impedance to capacitor reactance at 50Hz in RC parallel circuit.
+        uint8_t svtyp;      //SV type. 0=primary, 1=secondary
+        uint8_t reserve[41];
+        int32_t dbg32[4];
+        int16_t debug[8];
+        uint8_t res2[2];
+        uint8_t ver[2][3]; //firmware version. [0-1]:App,Bootloader
     } Para4Scnet;
 
     typedef struct {
@@ -47,7 +53,6 @@ class CommuForScnet {
        uint32_t crc;    //reserved for crc32
     } CrtlMacFrame;     //CrtlMacFrame tx_buf_;
     uint8_t rx_buf_[1520];
-    //uint8_t  ver_[2][3];    //firmware version. [0-1]:app, bootloader
     Para4Scnet par4scnet_;
 
     int OpenSocket();
@@ -67,7 +72,8 @@ class CommuForScnet {
     int GetParam(const char *filename, const uint8_t *mac);
     int MacPing(const uint8_t *mac, uint8_t echo=0);
     int Upgrade(const char *filename, const uint8_t *mac, uint16_t cmd, uint8_t fc=0);
-    int BatchSet(const uint8_t *chnl, const uint32_t *ratio, const uint8_t *mac);
+    int BatchSet(const uint8_t *chnl, const uint32_t *ratio, const uint8_t *mac, const float *c1c2, uint16_t rllc);
+    int DebugCmd(uint8_t cmdn, const uint8_t *mac);
 };
 
 
