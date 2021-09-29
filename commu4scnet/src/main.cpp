@@ -10,7 +10,7 @@
 #include "commu4scnet.h"
 #include "parse_optn_scnet.h"
 
-bool doIt = true;
+bool g_doIt = true;
 
 extern int g_test;
 int g_test;
@@ -21,7 +21,7 @@ This function handles the ^c, and allows us to cleanup on exit
 void ctrlCfun (int i)
 {
     printf("ctrlCfun is invoked!\n");
-    doIt = false;
+    g_doIt = false;
 }
 
 int main (int argc, char *argv[])
@@ -30,7 +30,7 @@ int main (int argc, char *argv[])
     int ret = parse_opt.Parse(argc, argv);
     if (ret < 0) return ret;
 
-    //signal (SIGINT, ctrlCfun);
+    signal (SIGINT, ctrlCfun);
     CommuForScnet commu;
     int cmd;
     switch (parse_opt.cmd()) {
@@ -52,6 +52,9 @@ int main (int argc, char *argv[])
                 case kUpApp:
                 case kUpBoot:
                     commu.Upgrade(parse_opt.filename_cfg(), parse_opt.mac(1), cmd, parse_opt.force());
+                    break;
+                case kSniff:
+                    commu.Sniff();
                     break;
                 case kDebug:
                     commu.DebugCmd(parse_opt.dbgcmd(), parse_opt.mac(1));

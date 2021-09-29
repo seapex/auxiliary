@@ -6,7 +6,7 @@ add_definitions(-DDPQNetGUI)
 # The version number.
 set (_VERSION_MAJOR 1)
 set (_VERSION_MINOR 0)
-set (_VERSION_PATCH 1)
+set (_VERSION_PATCH 2)
 
 macro (add_sources)
     file (RELATIVE_PATH _relPath "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_LIST_DIR}")

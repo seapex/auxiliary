@@ -4,7 +4,7 @@
 #ifndef _COMMU4SCNET_H_
 #define _COMMU4SCNET_H_
 
-enum MacCmd { kSetMac=7, kSetPar, kGetPar, kMacPing, kUpApp, kUpBoot, kDebug };
+enum MacCmd { kSetMac=7, kSetPar, kGetPar, kMacPing, kUpApp, kUpBoot, kDebug, kSniff};
 
 class CommuForScnet {
     int socket_fd_; // Socket file description
@@ -21,7 +21,9 @@ class CommuForScnet {
         uint32_t cvt_c1c2[2];   //C1/C2 capacitance, unit:uF. Note! The actual data type is float.
         uint16_t cvt_prl_res;   //Ratio of resistor impedance to capacitor reactance at 50Hz in RC parallel circuit.
         uint8_t svtyp;      //SV type. 0=primary, 1=secondary
-        uint8_t reserve[41];
+        uint8_t reserve[37];
+        uint8_t des_mac[2]; //destination mac address. 00:00 ~ 01:FF
+        uint16_t app_id;    //APPID. 0x4000~0x7FFF
         int32_t dbg32[4];
         int16_t debug[8];
         uint8_t res2[2];
@@ -74,6 +76,8 @@ class CommuForScnet {
     int Upgrade(const char *filename, const uint8_t *mac, uint16_t cmd, uint8_t fc=0);
     int BatchSet(const uint8_t *chnl, const uint32_t *ratio, const uint8_t *mac, const float *c1c2, uint16_t rllc);
     int DebugCmd(uint8_t cmdn, const uint8_t *mac);
+    void Sniff();
+    
 };
 
 

@@ -19,10 +19,13 @@
 static const uint8_t kGroupMac[6] = {0xB1, 0xE0, 0x14, 0x03, 0x08, 0x01};
 static const uint8_t kBoyuuOUI[3] = {0xB0, 0xE0, 0x14};
 
+enum ParamType {kFirmVer, kDevModel, kADCBkgrdDC, kCorrFactor, kPT_CT, kCVT_C1C2, kCVTllRes, kSVType, kDesMAC45, kAppID, kParamTypeEnd};
+static const char *kParamName[] = {"FirmwareVer", "DeviceModel", "ADCBackgroudDC[4]", "CorrectFactor[4]",
+            "PT_CT[2]", "C1/C2(uF)", "R//C", "SV type(p,s)", "DesMAC[4/5]", "AppID(hex 4000~7fff)"};
+
 enum DeviceModel {PQNet103D, PQNet204D, PQNet202CVT, PQNet202E1, PQNet202E2, PQNet101CVT, PQNet202Ex, PQNetxxx, DM_NoCard};
-enum ParamType {kFirmVer, kDevModel, kADCBkgrdDC, kCorrFactor, kPT_CT, kCVT_C1C2, kCVTllRes, kSVType, kParamTypeEnd};
-static const char *kParamName[] = {"FirmwareVer", "DeviceModel", "ADCBackgroudDC[4]", "CorrectFactor[4]", "PT_CT[2]", "C1/C2(uF)", "R//C", "SV type(p,s)"};
-static const char *DeviceModelStr[] = {"PQNet103D", "PQNet204D", "PQNet202CVT", "PQNet202E1", "PQNet202E2", "PQNet101CVT", "PQNet202Ex", "PQNetxxx", "DM_NoCard"};
+static const char *DeviceModelStr[] = {"PQNet103D", "PQNet204D", "PQNet202CVT", "PQNet202E1", "PQNet202E2", 
+            "PQNet101CVT", "PQNet202Ex", "PQNetxxx", "DM_NoCard"};
 
 CommuForScnet::CommuForScnet()
 {
@@ -154,6 +157,8 @@ void CommuForScnet::SaveParam(const char *filename, Para4Scnet *par)
     fprintf(fstrm, "%s=%d\n", kParamName[kCVTllRes], par->cvt_prl_res);
     char ps[2] = {'p', 's'};
     fprintf(fstrm, "%s=%c\n", kParamName[kSVType], ps[par->svtyp&1]);
+    fprintf(fstrm, "%s=%02X:%02X\n", kParamName[kDesMAC45], par->des_mac[0], par->des_mac[1]);
+    fprintf(fstrm, "%s=%X\n", kParamName[kAppID], par->app_id);
 
     fclose(fstrm);
     
@@ -179,7 +184,7 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
     char par_name[64], stri[128];
     int retv;
     float fi[4];
-    for (int n=0; n<10; n++) {
+    for (int n=0; n<kParamTypeEnd; n++) {
         retv = fscanf(fstrm, "%[^:=]", par_name);
         if (retv==EOF) break;
         int i, j;
@@ -229,11 +234,21 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
                 sscanf(stri, "=%c", &j);
                 par->svtyp = j=='s'?1:0;
                 break;
+            case kDesMAC45:
+                fgets(stri, sizeof(stri), fstrm);
+                sscanf(stri, "=%hhx:%hhx", &par->des_mac[0], &par->des_mac[1]);
+                break;
+            case kAppID:
+                fgets(stri, sizeof(stri), fstrm);
+                sscanf(stri, "=%hx", &par->app_id);
+                printf("dsagsdfag\n");
+                break;
             default:
                 break;
         }
     }
     fclose(fstrm);
+    printf("par->app_id=%x\n", par->app_id);
 
 #if 1
     printf("%s:%d.%d.%d\n", kParamName[kFirmVer], par->ver[0][0], par->ver[0][1], par->ver[0][2]);
@@ -429,7 +444,7 @@ int CommuForScnet::OpenSocket()
         perror("socket");
 	    return -1;
     }
-  	fcntl(socket_fd_, F_SETFL, O_NONBLOCK);     //Set read & write to no block
+  	//fcntl(socket_fd_, F_SETFL, O_NONBLOCK);     //Set read & write to no block
     return 0;
 }
 
@@ -601,8 +616,9 @@ int CommuForScnet::BatchSet(const uint8_t *scnet, const uint32_t *ratio, const u
         int up = 0;
         if (scnet[i]) {
             memcpy(&scnet_mac[3], &mac[3*i], 3);
-            retv = GetParam(NULL, scnet_mac);
+            retv = DebugCmd(1, scnet_mac);
             if (retv<0) continue;
+            retv = GetParam(NULL, scnet_mac);
             //printf("trns_rto=%d,%d\n", par4scnet_.trns_rto[0], par4scnet_.trns_rto[1]);
             if ( ratio[2*i] && ratio[2*i+1] ) {
                 if ( memcmp(par4scnet_.trns_rto, &ratio[2*i], 8) ) {
@@ -627,6 +643,7 @@ int CommuForScnet::BatchSet(const uint8_t *scnet, const uint32_t *ratio, const u
             if (up) {
                 retv = SetParam(NULL, scnet_mac);
             }
+            DebugCmd(0, scnet_mac);
         }
     }
     return retv;
@@ -657,6 +674,7 @@ inline void CommuForScnet::SwapBytes(Para4Scnet *par, int type)
         for (int i=0; i<8; i++) {
             par->debug[i] = ntohs(par->debug[i]);
         }
+        par->app_id = ntohs(par->app_id);
     } else {
         for (int i=0; i<4; i++) {
             par->adc_dc[i] = htons(par->adc_dc[i]);
@@ -668,13 +686,15 @@ inline void CommuForScnet::SwapBytes(Para4Scnet *par, int type)
             par->cvt_c1c2[i] = htonl(par->cvt_c1c2[i]);
         }
         par->cvt_prl_res = htons(par->cvt_prl_res);
+        par->app_id = htons(par->app_id);
     }
 }
 
 /*!
 Send debug command
 
-    Input:  cmdn -- command number
+    Input:  cmdn -- command number. 1=Switch to debug mode, 2=clear debug parameter, 
+                    other=Return to working mode.
             mac -- The MAC address of the scnet
     Return:  <0=failure
 */
@@ -723,4 +743,48 @@ int CommuForScnet::DebugCmd(uint8_t cmdn, const uint8_t *mac)
     return retv;   
 }
 
+extern bool g_doIt;
+static uint8_t smac_[64][6];
+static uint8_t smac_nm_ = 0;
+static uint32_t smac_cnt_[64];
+/*!
+Sniffing MAC source address
+*/
+void CommuForScnet::Sniff()
+{
+    int cnt;
+    uint32_t crc, fcs;
+    CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
+    printf ("Hit ^c to exit ... \n");
+    memset(smac_cnt_, 0, sizeof(smac_cnt_));
+    for (;;) {
+        cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
+        if(cnt>0) {
+            int hv = 0;
+            for (int j=0; j<smac_nm_; j++) {
+                if (!memcmp(smac_[j], rbuf->srcMac, 6)) {
+                    hv = 1;
+                    smac_cnt_[j]++;
+                    break;
+                }
+            }
+            if (!hv) {
+                fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
+                crc = crc32(0, Z_NULL, 0);
+                //if (fcs==crc32(crc, rx_buf_, cnt-4)) {
+                    memcpy(smac_[smac_nm_], rbuf->srcMac, 6);
+                    printf("%02X:%02X:%02X:%02X:%02X:%02X\n", rbuf->srcMac[0], rbuf->srcMac[1], rbuf->srcMac[2], rbuf->srcMac[3], rbuf->srcMac[4], rbuf->srcMac[5]);
+                    smac_cnt_[smac_nm_]++;
+                    smac_nm_++;
+                    if (smac_nm_>=64) break;
+                //}
+            }
+            if (!g_doIt) break;
+        }
+    }
+    printf("smac_nm_=%d\n", smac_nm_);
+    for (int i=0; i<smac_nm_; i++) {
+        printf("%02X:%02X:%02X:%02X:%02X:%02X [%d]\n", smac_[i][0], smac_[i][1], smac_[i][2], smac_[i][3], smac_[i][4], smac_[i][5], smac_cnt_[i]);
+    }
+}
 

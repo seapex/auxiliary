@@ -15,7 +15,7 @@ const char *kCmdName[kCmdTypeEnd] = {
     MAIN_PROG, "batchset"};
 
 //main command
-static const char * main_sopts = "hVm:s:g:pu:b:fd:";
+static const char * main_sopts = "hVm:s:g:pu:b:fd:S";
 static const option main_lopts[] = {
     { "help",       0, 0, 'h' },
     { "version",    0, 0, 'V' },
@@ -27,6 +27,7 @@ static const option main_lopts[] = {
     { "upboot",     1, 0, 'b' },
     { "force",      1, 0, 'f' },
     { "debug",      1, 0, 'd' },
+    { "sniff",      0, 0, 'S' },
     { NULL,         0, 0, 0 },
 };
 static const char * main_help =
@@ -47,7 +48,10 @@ static const char * main_help =
     "                       Upgrade bootloader firmware\n"
     "       -f, --force     Forced to upgrade\n"
     "       -d n, --debug=n\n"
-    "                       Debug command. n=0-255\n"
+    "                       Debug command. n=0-255.\n"
+    "                       1:Switch to debug mode; 2:clear debug parameter\n"
+    "                       other:return to working mode\n"
+    "       -S, --sniff     Sniffing MAC source address\n"
     "\nThe "MAIN_PROG" commands are:\n"
     "   batchset     Batch set the parameters of several devices\n"
     "\nSee '"MAIN_PROG" help <command>' for help information on a specific command.\n";
@@ -145,6 +149,9 @@ int ParseOptnScnet::HandleMain(int opt, char *arg)
         case 'd':
             sscanf(optarg, "%hhd", &dbgcmd_);
             mac_cmd_ = kDebug;
+            break;
+        case 'S':
+            mac_cmd_ = kSniff;
             break;
         default:
             return PrintHelp();

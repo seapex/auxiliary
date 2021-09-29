@@ -62,11 +62,11 @@ int main(int argc, char *argv[])
     } else if (strcmp(argv[1], "quit")==0) {
         cmd = kMnQuit;
     } else if (strcmp(argv[1], "coldboot")==0) {
-        cmd = kMnReboot;
+        cmd = kMnColdboot;
     } else if (strcmp(argv[1], "reboot")==0) {
         cmd = kMnReboot;
     } else if (strcmp(argv[1], "forceboot")==0) {
-        cmd = kMnReboot;
+        cmd = kForceBoot;
     } else if (strcmp(argv[1], "update")==0) {
         cmd = kUpdate;
     } else {
