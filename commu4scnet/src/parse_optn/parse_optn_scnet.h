@@ -21,7 +21,7 @@ public:
     const uint8_t *scnet() { return bset_par_.scnet; }
     const char *filename_cfg() { return pfile_cfg_; }
     uint8_t force() { return force_; }
-    const uint8_t *mac(int idx) { return mac_[idx]; }
+    const uint8_t *mac(int idx) { return pmac_[idx]; }
     uint8_t mac_cmd() { return mac_cmd_; }
     const uint32_t *trns_rto() { return &bset_par_.trns_rto[0][0]; }
     const float *c1c2() { return bset_par_.c1c2[0]; }
@@ -47,8 +47,9 @@ private:
     void InitParam();
     char filename_cfg_[128];  //configure file name
     const char *pfile_cfg_;
-    uint8_t mac_[2][6];     //Mac address.
-    uint8_t mac_cmd_;       //MAC communication command
+    uint8_t mac_[2][6]; //Mac address.
+    uint8_t *pmac_[2];  //pointer to mac_.
+    uint8_t mac_cmd_;   //MAC communication command
     uint8_t force_;     //Forced to upgrade. 1=force
     uint8_t dbgcmd_;    //debug command.
 };

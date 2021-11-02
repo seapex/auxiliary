@@ -101,6 +101,7 @@ void ParseOptnScnet::InitParam()
     mac_cmd_ = 0;
     force_ = 0;
     clr_bset_par();
+    memset(pmac_, 0, sizeof(pmac_));
 }
 
 /*!
@@ -111,14 +112,24 @@ Handle main command
 int ParseOptnScnet::HandleMain(int opt, char *arg)
 {
     uint8_t *mac;
+    int i;
     switch (opt) {
         case 'V':
             printf(MAIN_PROG" version %d.%d.%d\n", _VERSION_MAJOR, _VERSION_MINOR, _VERSION_PATCH);
             break;
         case 'm':
             mac = mac_[0];
+            memset(mac, 0xff, 6);
             sscanf(arg, "%hhx%*[:-]%hhx%*[:-]%hhx%*[:-]%hhx%*[:-]%hhx%*[:-]%hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
-            mac_cmd_ = kSetMac;
+            for (i=0; i<6; i++) {
+                if (mac[i]==0xff) break;
+            }
+            if (i==6) {
+                pmac_[0] = mac;
+                mac_cmd_ = kSetMac;
+            } else {
+                printf("%s is invald MAC\n", arg);
+            }
             break;
         case 's':
             strcpy(filename_cfg_, arg);
@@ -168,7 +179,7 @@ int ParseOptnScnet::HandleOther(char *arg)
 {
     uint8_t *mac = mac_[1];
     sscanf(arg, "%hhx%*[:-]%hhx%*[:-]%hhx%*[:-]%hhx%*[:-]%hhx%*[:-]%hhx", &mac[0], &mac[1], &mac[2], &mac[3], &mac[4], &mac[5]);
-    
+    pmac_[1] = mac_[1];
     return 0;
 }
 

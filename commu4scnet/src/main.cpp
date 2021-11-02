@@ -38,7 +38,7 @@ int main (int argc, char *argv[])
             cmd = parse_opt.mac_cmd();
             switch (cmd) {
                 case kSetMac:
-                    commu.SetMacAddr(parse_opt.mac(0));
+                    commu.SetMacAddr(parse_opt.mac(0), parse_opt.mac(1));
                     break;
                 case kSetPar:
                     commu.SetParam(parse_opt.filename_cfg(), parse_opt.mac(1));

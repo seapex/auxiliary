@@ -23,9 +23,9 @@ enum ParamType {kFirmVer, kDevModel, kADCBkgrdDC, kCorrFactor, kPT_CT, kCVT_C1C2
 static const char *kParamName[] = {"FirmwareVer", "DeviceModel", "ADCBackgroudDC[4]", "CorrectFactor[4]",
             "PT_CT[2]", "C1/C2(uF)", "R//C", "SV type(p,s)", "DesMAC[4/5]", "AppID(hex 4000~7fff)"};
 
-enum DeviceModel {PQNet103D, PQNet204D, PQNet202CVT, PQNet202E1, PQNet202E2, PQNet101CVT, PQNet202Ex, PQNetxxx, DM_NoCard};
+enum DeviceModel {PQNet103D, PQNet204D, PQNet202CVT, PQNet202E1, PQNet202E2, PQNet101CVT, PQNet202E3, PQNet202Ex, PQNetxxx, DM_NoCard};
 static const char *DeviceModelStr[] = {"PQNet103D", "PQNet204D", "PQNet202CVT", "PQNet202E1", "PQNet202E2", 
-            "PQNet101CVT", "PQNet202Ex", "PQNetxxx", "DM_NoCard"};
+            "PQNet101CVT", "PQNet202E3", "PQNet202Ex", "PQNetxxx", "DM_NoCard"};
 
 CommuForScnet::CommuForScnet()
 {
@@ -82,6 +82,10 @@ int CommuForScnet::GetLocalMac(uint8_t *mac, int *idx, const char *name)
 
 inline int CommuForScnet::CheckMacAddr(const uint8_t *mac)
 {
+    if (!mac) {
+        printf("Missing MAC address!\n");
+        return 2;
+    }
     if (memcmp(mac, kBoyuuOUI, 3)) {
         printf("Invalid MAC address! %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
         return 1;
@@ -93,15 +97,17 @@ inline int CommuForScnet::CheckMacAddr(const uint8_t *mac)
 /*!
 Set MAC address to scnet
 
-    Input:  mac -- The MAC address of the scnet
+    Input:  mac -- The MAC address of the scnet will be set
+            dmac -- current mac of the scnet. NULL=group mac
     Return:  <0=failure
 */
-int CommuForScnet::SetMacAddr(const uint8_t *mac)
+int CommuForScnet::SetMacAddr(const uint8_t *mac, const uint8_t *dmac)
 {
     if (CheckMacAddr(mac)) return -1;
 
     CrtlMacFrame tbuf;
-    memcpy(tbuf.desMac, kGroupMac, 6);
+    if (dmac) memcpy(tbuf.desMac, dmac, 6);
+    else memcpy(tbuf.desMac, kGroupMac, 6);
     memcpy(tbuf.srcMac, src_mac_, 6);
     tbuf.ethertype = htons(eth_type_);
     tbuf.length = htons(44);
@@ -202,7 +208,10 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
                 for (j=0; j<=PQNet202Ex; j++) {
                     if ( !strcmp(par_name, DeviceModelStr[j]) ) break;
                 }
-                if (j>PQNet202Ex) return -1;
+                if (j>PQNet202Ex) {
+                    printf("DeviceModel=%s is invalid!\n", par_name);
+                    return -1;
+                }
                 par->dev_model = j;
                 break;
             case kADCBkgrdDC:
@@ -293,7 +302,8 @@ int CommuForScnet::GetParam(const char *filename, const uint8_t *mac)
         for (;;) {
             cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
             if(cnt>0) {
-                if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kGetPar) {
+                if (ntohs(rbuf->ethertype)!=eth_type_) {
+                } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kGetPar) {
                     uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
                     crc = crc32(0, Z_NULL, 0);
                     if (fcs==crc32(crc, rx_buf_, cnt-4)) {
@@ -359,10 +369,10 @@ int CommuForScnet::SetParam(const char *filename, const uint8_t *mac)
         sendto(socket_fd_, &tbuf, sizeof(Para4Scnet)+24, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
         StopWatch(0, 1, NULL);
         for (;;) {
-            msSleep(1);
             cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
             if(cnt>0) {
-                if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kSetPar) {
+                if (ntohs(rbuf->ethertype)!=eth_type_) {
+                } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kSetPar) {
                     uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
                     crc = crc32(0, Z_NULL, 0);
                     if (fcs==crc32(crc, rx_buf_, cnt-4)) {
@@ -413,7 +423,8 @@ int CommuForScnet::MacPing(const uint8_t *mac, uint8_t echo)
         for (;;) {
             cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
             if(cnt>0) {
-                if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kMacPing) {
+                if (ntohs(rbuf->ethertype)!=eth_type_) {
+                } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kMacPing) {
                     uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
                     crc = crc32(0, Z_NULL, 0);
                     if (fcs==crc32(crc, rx_buf_, cnt-4)) {
@@ -485,7 +496,10 @@ FILE *CommuForScnet::OpenUpFile(uint8_t *ver, const char *filename, int vdx, uin
         retv = -1;
     } else {
         printf("%d.%d.%d-->%d.%d.%d\n", par4scnet_.ver[vdx][0], par4scnet_.ver[vdx][1], par4scnet_.ver[vdx][2], ver[0], ver[1], ver[2]);
-        if (memcmp(ver, par4scnet_.ver[vdx], 3)<=0 && !fc) {
+        if (par4scnet_.ver[vdx][0] && ver[0]!=par4scnet_.ver[vdx][0]) {
+            printf("Hardware version mismatch!\n");
+            retv = -1;
+        } else if (memcmp(ver, par4scnet_.ver[vdx], 3)<=0 && !fc) {
             printf("Already the latest version, no need to upgrade!\n");
             retv = -1;
         }
@@ -549,7 +563,8 @@ int CommuForScnet::Upgrade(const char *filename, const uint8_t *mac, uint16_t cm
             for (;;) {
                 cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
                 if(cnt>0) {
-                    if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==cmd) {
+                    if (ntohs(rbuf->ethertype)!=eth_type_) {
+                    } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==cmd) {
                         uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
                         crc = crc32(0, Z_NULL, 0);
                         if (fcs==crc32(crc, rx_buf_, cnt-4)) {
@@ -695,15 +710,16 @@ Send debug command
 
     Input:  cmdn -- command number. 1=Switch to debug mode, 2=clear debug parameter, 
                     other=Return to working mode.
-            mac -- The MAC address of the scnet
+            mac -- The MAC address of the scnet. NULL=group mac
     Return:  <0=failure
 */
 int CommuForScnet::DebugCmd(uint8_t cmdn, const uint8_t *mac)
 {
-    if (CheckMacAddr(mac)) return -1;
-    
     CrtlMacFrame tbuf;
-    memcpy(tbuf.desMac, mac, 6);
+    if (mac) {
+        if (CheckMacAddr(mac)) return -1;
+        memcpy(tbuf.desMac, mac, 6);
+    } else memcpy(tbuf.desMac, kGroupMac, 6);
     memcpy(tbuf.srcMac, src_mac_, 6);
     tbuf.ethertype = htons(eth_type_);
     tbuf.length = htons(44);
@@ -719,10 +735,16 @@ int CommuForScnet::DebugCmd(uint8_t cmdn, const uint8_t *mac)
     for (i=0; i<3; i++) {
         sendto(socket_fd_, &tbuf, 64, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
         StopWatch(0, 1, NULL);
+        if (!mac) {
+            msSleep(100);
+            retv = 0;
+            break;
+        }
         for (;;) {
             cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
             if(cnt>0) {
-                if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kDebug) {
+                if (ntohs(rbuf->ethertype)!=eth_type_) {
+                } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kDebug) {
                     uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
                     crc = crc32(0, Z_NULL, 0);
                     if (fcs==crc32(crc, rx_buf_, cnt-4)) {
@@ -746,7 +768,7 @@ int CommuForScnet::DebugCmd(uint8_t cmdn, const uint8_t *mac)
 extern bool g_doIt;
 static uint8_t smac_[64][6];
 static uint8_t smac_nm_ = 0;
-static uint32_t smac_cnt_[64];
+static uint32_t smac_cnt_[64][2];   //[0-1]:total count, error count
 /*!
 Sniffing MAC source address
 */
@@ -757,34 +779,38 @@ void CommuForScnet::Sniff()
     CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
     printf ("Hit ^c to exit ... \n");
     memset(smac_cnt_, 0, sizeof(smac_cnt_));
+    int n = 0;
     for (;;) {
         cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
         if(cnt>0) {
-            int hv = 0;
-            for (int j=0; j<smac_nm_; j++) {
+            int j, hv = 0;
+            for (j=0; j<smac_nm_; j++) {
                 if (!memcmp(smac_[j], rbuf->srcMac, 6)) {
                     hv = 1;
-                    smac_cnt_[j]++;
                     break;
                 }
             }
+            //printf("j=%d, hv=%d\n", j, hv);
+            if (j>=64) break;
+            fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
+            crc = crc32(0, Z_NULL, 0);
+            if (fcs!=crc32(crc, rx_buf_, cnt-4)) {
+                smac_cnt_[j][1]++;
+            }
+            smac_cnt_[j][0]++;
+            
             if (!hv) {
-                fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
-                crc = crc32(0, Z_NULL, 0);
-                //if (fcs==crc32(crc, rx_buf_, cnt-4)) {
-                    memcpy(smac_[smac_nm_], rbuf->srcMac, 6);
-                    printf("%02X:%02X:%02X:%02X:%02X:%02X\n", rbuf->srcMac[0], rbuf->srcMac[1], rbuf->srcMac[2], rbuf->srcMac[3], rbuf->srcMac[4], rbuf->srcMac[5]);
-                    smac_cnt_[smac_nm_]++;
-                    smac_nm_++;
-                    if (smac_nm_>=64) break;
-                //}
+                smac_nm_ = j+1;
+                memcpy(smac_[j], rbuf->srcMac, 6);
+                printf("%02X:%02X:%02X:%02X:%02X:%02X\n", smac_[j][0], smac_[j][1], smac_[j][2], smac_[j][3], smac_[j][4], smac_[j][5]);
             }
             if (!g_doIt) break;
+            //if (n++>50) break;
         }
     }
     printf("smac_nm_=%d\n", smac_nm_);
     for (int i=0; i<smac_nm_; i++) {
-        printf("%02X:%02X:%02X:%02X:%02X:%02X [%d]\n", smac_[i][0], smac_[i][1], smac_[i][2], smac_[i][3], smac_[i][4], smac_[i][5], smac_cnt_[i]);
+        printf("%02X:%02X:%02X:%02X:%02X:%02X [%d/%d]\n", smac_[i][0], smac_[i][1], smac_[i][2], smac_[i][3], smac_[i][4], smac_[i][5], smac_cnt_[i][0], smac_cnt_[i][1]);
     }
 }
 

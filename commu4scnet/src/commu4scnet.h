@@ -69,7 +69,7 @@ class CommuForScnet {
     CommuForScnet();
     ~CommuForScnet();
     
-    int SetMacAddr(const uint8_t *mac);
+    int SetMacAddr(const uint8_t *mac, const uint8_t *dmac);
     int SetParam(const char *filename, const uint8_t *mac);
     int GetParam(const char *filename, const uint8_t *mac);
     int MacPing(const uint8_t *mac, uint8_t echo=0);
@@ -77,7 +77,6 @@ class CommuForScnet {
     int BatchSet(const uint8_t *chnl, const uint32_t *ratio, const uint8_t *mac, const float *c1c2, uint16_t rllc);
     int DebugCmd(uint8_t cmdn, const uint8_t *mac);
     void Sniff();
-    
 };
 
 
