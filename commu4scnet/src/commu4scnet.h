@@ -11,7 +11,8 @@ class CommuForScnet {
   	struct sockaddr_ll *sock_ll_;   // Link-Layer socket descriptor
     uint8_t src_mac_[6];
     uint16_t eth_type_; //shall be 0xB0E0
-    
+
+#pragma pack(4)
     typedef struct {
         uint8_t dev_model;  //Device model
         uint8_t res1[3];
@@ -24,9 +25,7 @@ class CommuForScnet {
         uint8_t reserve[37];
         uint8_t des_mac[2]; //destination mac address. 00:00 ~ 01:FF
         uint16_t app_id;    //APPID. 0x4000~0x7FFF
-        int32_t dbg32[4];
-        int16_t debug[8];
-        uint8_t res2[2];
+        uint8_t res2[34];
         uint8_t ver[2][3]; //firmware version. [0-1]:App,Bootloader
     } Para4Scnet;
 
@@ -37,6 +36,14 @@ class CommuForScnet {
         uint8_t buf[1024];
     } UpgradePack;
     
+    typedef struct {
+        int16_t dbg16[8];
+        int32_t dbg32[8];
+        float   dbgfl[4];
+        int64_t dbg64[2];
+        //uint8_t rev[16];
+    } Debug4Scnet;
+
     typedef struct {
         uint8_t  desMac[6]; // Destination MAC address
         uint8_t  srcMac[6]; // Source MAC address
@@ -51,11 +58,14 @@ class CommuForScnet {
             } mac;
             Para4Scnet para;
             UpgradePack pack;
+            Debug4Scnet dbg_inf;
        } data;
-       uint32_t crc;    //reserved for crc32
-    } CrtlMacFrame;     //CrtlMacFrame tx_buf_;
+       uint32_t crc;    //Frame Check Sequence. CRC32
+    } CrtlMacFrame;     //Compatible with Ethernet II frame formats
     uint8_t rx_buf_[1520];
     Para4Scnet par4scnet_;
+    Debug4Scnet dbg4scnet_;
+#pragma pack()
 
     int OpenSocket();
     int GetLocalMac(uint8_t *mac, int *idx, const char *name);
@@ -63,7 +73,7 @@ class CommuForScnet {
     void SaveParam(const char *filename, Para4Scnet *par);
     int LoadParam(Para4Scnet *par, const char *filename);
     FILE *OpenUpFile(uint8_t *ver, const char *filename, int vdx, uint8_t fc=0);
-    void SwapBytes(Para4Scnet *par, int type);
+    void SwapBytes(void *par, int hn, int type);
     
   public:
     CommuForScnet();
@@ -75,7 +85,7 @@ class CommuForScnet {
     int MacPing(const uint8_t *mac, uint8_t echo=0);
     int Upgrade(const char *filename, const uint8_t *mac, uint16_t cmd, uint8_t fc=0);
     int BatchSet(const uint8_t *chnl, const uint32_t *ratio, const uint8_t *mac, const float *c1c2, uint16_t rllc);
-    int DebugCmd(uint8_t cmdn, const uint8_t *mac);
+    int DebugCmd(uint8_t cmdn, const uint8_t *mac=NULL);
     void Sniff();
 };
 

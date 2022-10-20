@@ -49,8 +49,8 @@ static const char * main_help =
     "       -f, --force     Forced to upgrade\n"
     "       -d n, --debug=n\n"
     "                       Debug command. n=0-255.\n"
-    "                       1:Switch to debug mode; 2:clear debug parameter\n"
-    "                       other:return to working mode\n"
+    "                       0:Switch to working mode; 1:Switch to debug mode\n"
+    "                       2:clear debug parameter;  3:get debug information\n"
     "       -S, --sniff     Sniffing MAC source address\n"
     "\nThe "MAIN_PROG" commands are:\n"
     "   batchset     Batch set the parameters of several devices\n"
@@ -67,13 +67,13 @@ static const option bset_lopts[] = {
     { NULL,         0, 0, 0 },
 };
 static const char * bset_help =
-    "Usage: "MAIN_PROG" batchset [args] [mac address]\n"
+    "Usage: "MAIN_PROG" batchset [args] -m \"mac address\"\n"
+    "       -m, --mac=\"mac1 mac2 mac3 mac4\"\n"
+    "                      Lower 24 bits of the MAC address of channel1-4\n"
     "       -c, --scnetx=hexnum\n"
     "                       SCNetxxs to be set. bit0-3:SCNetxx1-4. 0=not, 1=set\n"
     "       -r, --ratiox=\"p,s p,s p,s p,s\"\n"
     "                       PT or CT of SCNetxx1-4\n"
-    "       -m, --mac=\"mac1 mac2 mac3 mac4\"\n"
-    "                      Lower 24 bits of the MAC address of channel1-4\n"
     "       -C, --c1c2=\"c1,c2 c1,c2 c1,c2\"\n"
     "                      C1/C2 of PhaseA-C\n";
     //"       -R, --rllc=x\n"

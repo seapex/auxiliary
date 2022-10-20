@@ -167,10 +167,6 @@ void CommuForScnet::SaveParam(const char *filename, Para4Scnet *par)
     fprintf(fstrm, "%s=%X\n", kParamName[kAppID], par->app_id);
 
     fclose(fstrm);
-    
-    printf("dbg32[0-3]=%9d %9d %9d %9d\n", par->dbg32[0], par->dbg32[1], par->dbg32[2], par->dbg32[3]);
-    printf("debug[0-3]=%05d %05d %05d %05d\n", par->debug[0], par->debug[1], par->debug[2], par->debug[3]);
-    printf("debug[4-7]=%05d %05d %05d %05d\n", par->debug[4], par->debug[5], par->debug[6], par->debug[7]);
 }
 
 /*!
@@ -310,9 +306,9 @@ int CommuForScnet::GetParam(const char *filename, const uint8_t *mac)
                         StopWatch(0, 0, NULL);
                         retv = 0;
                         memcpy(&par4scnet_, &rbuf->data.para, sizeof(par4scnet_));
-                        SwapBytes(&par4scnet_, 1);
+                        SwapBytes(&par4scnet_, 1, 0);
                         if (filename) {
-                            printf("%d bytes frome %02X:%02X:%02X:%02X:%02X:%02X; time=%6.3fms\n", 
+                            printf("%d bytes from %02X:%02X:%02X:%02X:%02X:%02X; time=%6.3fms\n", 
                                      cnt, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], stopwatch_dur(0)*1000);
                             SaveParam(filename, &par4scnet_);
                         }
@@ -356,7 +352,7 @@ int CommuForScnet::SetParam(const char *filename, const uint8_t *mac)
     } else {
         memcpy(&tbuf.data.para, &par4scnet_, sizeof(par4scnet_));
     }
-    SwapBytes(&tbuf.data.para, 0);
+    SwapBytes(&tbuf.data.para, 0, 0);
     
     uint8_t *pbuf = (uint8_t *)&tbuf;
     uint32_t crc = crc32(0, Z_NULL, 0);
@@ -430,7 +426,7 @@ int CommuForScnet::MacPing(const uint8_t *mac, uint8_t echo)
                     if (fcs==crc32(crc, rx_buf_, cnt-4)) {
                         if (echo) {
                              StopWatch(0, 0, NULL);
-                             printf("%d bytes frome %02X:%02X:%02X:%02X:%02X:%02X; time=%6.3fms\n", 
+                             printf("%d bytes from %02X:%02X:%02X:%02X:%02X:%02X; time=%6.3fms\n", 
                                      cnt, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], stopwatch_dur(0)*1000);
                         }
                         retv = 0;
@@ -532,6 +528,11 @@ int CommuForScnet::Upgrade(const char *filename, const uint8_t *mac, uint16_t cm
     FILE *fstrm = OpenUpFile(ver, filename, vdx, fc);
     if (!fstrm) return -2;
     
+    for (int i=0; i<2; i++) {
+        DebugCmd(1);
+        msSleep(300);
+    }
+    DebugCmd(1, mac);
     fseek(fstrm, 0, SEEK_SET);
     CrtlMacFrame tbuf;
     memcpy(tbuf.desMac, mac, 6);
@@ -576,7 +577,7 @@ int CommuForScnet::Upgrade(const char *filename, const uint8_t *mac, uint16_t cm
                     }
                 }
                 StopWatch(0, 0, NULL);
-                if (stopwatch_dur(0)>3) break;
+                if (stopwatch_dur(0)>2) break;
             }
             if (!retv) break;
         }
@@ -590,25 +591,32 @@ int CommuForScnet::Upgrade(const char *filename, const uint8_t *mac, uint16_t cm
     if (!retv) {
         printf("ok\nStart update ."); fflush(stdout);
         int i;
-        msSleep(500);
-        for (i=0; i<15; i++) {
+        msSleep(1000);
+        for (i=0; i<2; i++) {
+            printf("."); fflush(stdout);
+            msSleep(1000);
+        }
+        for (i=0; i<20; i++) {
             printf("."); fflush(stdout);
             if (!GetParam(NULL, mac)) {
                if (memcmp(ver, par4scnet_.ver[vdx], sizeof(ver))==0) {
                     printf("ok\nUpdate succeed!\n");
-                } else i = 30;
-                break;
+                    break;
+               }
+               msSleep(1000);
             }
         }
         if (i>=15) {
             printf("failed!\nUpdate failed!\n");
-            return -3;
+            retv = -3;
         }
     } else {
         printf("failed!\n");
-        return -3;
+        retv = -3;
     }
-    return 0;
+    DebugCmd(0, mac);
+    DebugCmd(0);
+    return retv;
 }
 
 /*!
@@ -626,6 +634,9 @@ int CommuForScnet::BatchSet(const uint8_t *scnet, const uint32_t *ratio, const u
     uint8_t scnet_mac[6] = {0xB0, 0xE0, 0x14};
     int retv = 0;
     uint32_t cx[2];
+
+    DebugCmd(1);
+    msSleep(100);
     for (int i=0; i<4; i++) {
         //printf("%d; %d:%d; %x-%x-%x %f,%f %d\n", scnet[i], ratio[2*i], ratio[2*i+1], mac[3*i], mac[3*i+1], mac[3*i+2], c1c2[2*i], c1c2[2*i+1], rllc);
         int up = 0;
@@ -661,54 +672,66 @@ int CommuForScnet::BatchSet(const uint8_t *scnet, const uint32_t *ratio, const u
             DebugCmd(0, scnet_mac);
         }
     }
+    DebugCmd(0);
     return retv;
 }
 
 /*!
 Swap bytes order -- endianness
 
-    Input:  type -- 0=Host2Net, 1=Net2Host
+    Input:  nh -- 0=Host2Net, 1=Net2Host
+            type -- 0=Para4Scnet, 1=Debug4Scnet 
     Output: par --
 */
-inline void CommuForScnet::SwapBytes(Para4Scnet *par, int type)
+void CommuForScnet::SwapBytes(void *pnt, int nh, int type)
 {
-    if (type) {
-        for (int i=0; i<4; i++) {
-            par->adc_dc[i] = ntohs(par->adc_dc[i]);
-            par->corr[i] = ntohl(par->corr[i]);
-            par->adc_dc[i] = ntohs(par->adc_dc[i]);
-        }
-        for (int i=0; i<2; i++) {
-            par->trns_rto[i] = ntohl(par->trns_rto[i]);
-            par->cvt_c1c2[i] = ntohl(par->cvt_c1c2[i]);
-        }
-        par->cvt_prl_res = ntohs(par->cvt_prl_res);
-        for (int i=0; i<4; i++) {
-            par->dbg32[i] = ntohl(par->dbg32[i]);
-        }
-        for (int i=0; i<8; i++) {
-            par->debug[i] = ntohs(par->debug[i]);
-        }
-        par->app_id = ntohs(par->app_id);
+    if (type==1) {
+            Debug4Scnet *par = (Debug4Scnet *)pnt;
+            if (nh) {
+                for (int i=0; i<8; i++) {
+                    par->dbg16[i] = ntohs(par->dbg16[i]);
+                    par->dbg32[i] = ntohl(par->dbg32[i]);
+                }
+            } else {
+                for (int i=0; i<8; i++) {
+                    par->dbg16[i] = htons(par->dbg16[i]);
+                    par->dbg32[i] = htonl(par->dbg32[i]);
+                }
+            }
     } else {
-        for (int i=0; i<4; i++) {
-            par->adc_dc[i] = htons(par->adc_dc[i]);
-            par->corr[i] = htonl(par->corr[i]);
-            par->adc_dc[i] = htons(par->adc_dc[i]);
-        }
-        for (int i=0; i<2; i++) {
-            par->trns_rto[i] = htonl(par->trns_rto[i]);
-            par->cvt_c1c2[i] = htonl(par->cvt_c1c2[i]);
-        }
-        par->cvt_prl_res = htons(par->cvt_prl_res);
-        par->app_id = htons(par->app_id);
+            Para4Scnet *par = (Para4Scnet *)pnt;
+            if (nh) {
+                for (int i=0; i<4; i++) {
+                    par->adc_dc[i] = ntohs(par->adc_dc[i]);
+                    par->corr[i] = ntohl(par->corr[i]);
+                    par->adc_dc[i] = ntohs(par->adc_dc[i]);
+                }
+                for (int i=0; i<2; i++) {
+                    par->trns_rto[i] = ntohl(par->trns_rto[i]);
+                    par->cvt_c1c2[i] = ntohl(par->cvt_c1c2[i]);
+                }
+                par->cvt_prl_res = ntohs(par->cvt_prl_res);
+                par->app_id = ntohs(par->app_id);
+            } else {
+                for (int i=0; i<4; i++) {
+                    par->adc_dc[i] = htons(par->adc_dc[i]);
+                    par->corr[i] = htonl(par->corr[i]);
+                    par->adc_dc[i] = htons(par->adc_dc[i]);
+                }
+                for (int i=0; i<2; i++) {
+                    par->trns_rto[i] = htonl(par->trns_rto[i]);
+                    par->cvt_c1c2[i] = htonl(par->cvt_c1c2[i]);
+                }
+                par->cvt_prl_res = htons(par->cvt_prl_res);
+                par->app_id = htons(par->app_id);
+            }
     }
 }
 
 /*!
 Send debug command
 
-    Input:  cmdn -- command number. 1=Switch to debug mode, 2=clear debug parameter, 
+    Input:  cmdn -- command number. 1=Switch to debug mode, 2=clear debug information, 3=get debug information
                     other=Return to working mode.
             mac -- The MAC address of the scnet. NULL=group mac
     Return:  <0=failure
@@ -716,24 +739,34 @@ Send debug command
 int CommuForScnet::DebugCmd(uint8_t cmdn, const uint8_t *mac)
 {
     CrtlMacFrame tbuf;
+    uint8_t gmac = 0;
     if (mac) {
         if (CheckMacAddr(mac)) return -1;
         memcpy(tbuf.desMac, mac, 6);
-    } else memcpy(tbuf.desMac, kGroupMac, 6);
+    } else { 
+        memcpy(tbuf.desMac, kGroupMac, 6);
+        gmac = 1;
+        printf("Debug command %d is send to %02X:%02X:%02X:%02X:%02X:%02X\n", cmdn, 
+               tbuf.desMac[0], tbuf.desMac[1], tbuf.desMac[2], tbuf.desMac[3], tbuf.desMac[4], tbuf.desMac[5]);
+    }
     memcpy(tbuf.srcMac, src_mac_, 6);
     tbuf.ethertype = htons(eth_type_);
-    tbuf.length = htons(44);
+    tbuf.length = htons(sizeof(Debug4Scnet)+4);
     tbuf.cmd = htons(kDebug);
     tbuf.res[0] = cmdn;
-    uint32_t crc = crc32(0, Z_NULL, 0);
+    memcpy(&tbuf.data.dbg_inf, &dbg4scnet_, sizeof(dbg4scnet_));
+    SwapBytes(&tbuf.data.dbg_inf, 0, 1);
+    
     uint8_t *pbuf = (uint8_t *)&tbuf;
-    crc = crc32(crc, pbuf, 60);
-    memcpy(&pbuf[60], &crc, 4);    
+    uint32_t crc = crc32(0, Z_NULL, 0);
+    crc = crc32(crc, pbuf, sizeof(Debug4Scnet)+20);
+    memcpy(&pbuf[sizeof(Debug4Scnet)+20], &crc, 4);
 
     int retv = -1, i, cnt;
     CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
     for (i=0; i<3; i++) {
-        sendto(socket_fd_, &tbuf, 64, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
+        sendto(socket_fd_, &tbuf, sizeof(Debug4Scnet)+24, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
+        if (gmac) break;
         StopWatch(0, 1, NULL);
         if (!mac) {
             msSleep(100);
@@ -751,6 +784,18 @@ int CommuForScnet::DebugCmd(uint8_t cmdn, const uint8_t *mac)
                         StopWatch(0, 0, NULL);
                         printf("Debug command send succeed >> %02X:%02X:%02X:%02X:%02X:%02X; time=%6.3fms\n", 
                                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], stopwatch_dur(0)*1000);
+                        if (cmdn==3) {
+                            Debug4Scnet *par = &dbg4scnet_;
+                            memcpy(par, &rbuf->data.dbg_inf, sizeof(dbg4scnet_));
+                            SwapBytes(par, 1, 1);
+                            printf("DMA2_Stream0_IRQHandler()\n");
+                            printf("dbg16[0-3]=%05d %05d %05d %05d\n", par->dbg16[0], par->dbg16[1], par->dbg16[2], par->dbg16[3]);
+                            printf("CVTHandle()\n");
+                            printf("fifo_idc_[0,1].dc=%d,%d; max/min c1=%d/%d\n", par->dbg16[4], par->dbg16[5], par->dbg16[6], par->dbg16[7]);
+                            printf("udc=%d; max/min udc=%d/%d; smp_pns=%d\n", par->dbg32[0], par->dbg32[1], par->dbg32[2], par->dbg32[3]);
+                            printf("fifo_idc_[0,1].sum=%d,%d\n", par->dbg32[4], par->dbg32[5]);
+                            printf("fifo_udc_.sum=%13lld\n", par->dbg64[0]);
+                        }
                         retv = 0;
                         break;
                     }
@@ -813,4 +858,3 @@ void CommuForScnet::Sniff()
         printf("%02X:%02X:%02X:%02X:%02X:%02X [%d/%d]\n", smac_[i][0], smac_[i][1], smac_[i][2], smac_[i][3], smac_[i][4], smac_[i][5], smac_cnt_[i][0], smac_cnt_[i][1]);
     }
 }
-

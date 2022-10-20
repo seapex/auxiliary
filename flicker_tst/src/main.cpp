@@ -72,9 +72,10 @@ Simulative Pst data wave generator
             chl -- channel. 0-3
             phs -- phase. 0-2:A-C
             amp -- amplitude
+            dc -- DC component
     Output: pbuf
 */
-void PstWaveGen(int32_t *pbuf, int num, int chl, int phs, float amp)
+void PstWaveGen(int32_t *pbuf, int num, int chl, int phs, float amp, float dc)
 {
     double pow_freq = 50;
     double m = sqr_par_[sqr_type_].amp/200;
@@ -84,7 +85,7 @@ void PstWaveGen(int32_t *pbuf, int num, int chl, int phs, float amp)
     
     int x = pst_x_[chl][phs];
     for (int i=0; i<num; i++) {
-        pbuf[i] = amp*(1+m*SquareWave(2*f*x*smpl_t))*cos(2*kM_PI*pow_freq*x*smpl_t - 2*kM_PI*phs/3);
+        pbuf[i] = amp*(1+m*SquareWave(2*f*x*smpl_t))*cos(2*kM_PI*pow_freq*x*smpl_t - 2*kM_PI*phs/3) + dc;
         x++;
     }
     pst_x_[chl][phs] = x;
@@ -138,7 +139,7 @@ void TestSpeed(int val, int phs, int type)
     int32_t *wave = new int32_t[nums];
     float *data = new float[nums];
     float *buf = new float[nums];
-    PstWaveGen(wave, nums, 0, phs, 100000);
+    PstWaveGen(wave, nums, 0, phs, 100000, 0);
     StopWatch (0, 1, "test speed:");
     for (int i=0; i<val; i++) {
         for (int j=0; j<rounds; j++) {
@@ -170,7 +171,7 @@ void TestAccuracy(int val, int phs, int type)
     for (int i=0; i<val; i++) {
         if (i%10==0) pst_x_[0][phs] = 0;
         for (int j=0; j<rounds; j++) {
-            PstWaveGen(wave, nums, 0, phs, 100000);
+            PstWaveGen(wave, nums, 0, phs, 100000, 100000/sqrt(2));
             for (int k=0; k<nums; k++) {
                 data[k] = wave[k];
                 data[k] /= 100;
@@ -186,7 +187,6 @@ void TestAccuracy(int val, int phs, int type)
     delete [] buf;
     delete [] data;
 }
-
 
 int main (int argc, char *argv[])
 {

@@ -1,5 +1,6 @@
 #include <math.h>
 //#include <fastmath67x.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include "flicker_filter.h"
@@ -145,9 +146,10 @@ void PreFilter(float *des, const float *src, int cnt, DCFltrTmpVar *dc)
 
     //提取出调制波的相对波动, 消除载波幅值对最终结果的影响。
     d1 = dc->aftavg;
+    //printf("dc->bfavg=%g, dc->aftavg=%g\n", dc->bfavg, dc->aftavg);
     if (d1>0) {
         for(i = 0; i < cnt; i++) {
-            des[i] = (des[i]-d1)*50/d1;   //It's very important,Don't modify!!!
+            des[i] = (des[i]-d1)*50/(d1+dc->bfavg*dc->bfavg);   //It's very important,Don't modify!!!
         }
     } else {
         memset(des, 0, sizeof(float)*cnt);

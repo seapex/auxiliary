@@ -1,0 +1,8 @@
+#CmakeLists for commu/ mqtt client
+
+file (RELATIVE_PATH _pwd "${CMAKE_CURRENT_SOURCE_DIR}" "${COMMON_PATH}/commu")
+message("_pwd=${_pwd} src=${CMAKE_CURRENT_SOURCE_DIR} commu=${COMMON_PATH}/commu")
+add_sources(${_pwd}/socket_client.cpp)
+add_sources(${_pwd}/protocol/phy_prtcl_mqttc.cpp)
+add_sources(${_pwd}/protocol/app_prtcl_mqttc.cpp)
+

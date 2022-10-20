@@ -1,14 +1,18 @@
 cmake_minimum_required (VERSION 2.8)
-project (CommuForSCNet) # Communication tool for SCNet
-
-if ( (${RUN_PLATFORM} STREQUAL "wx86") OR (${RUN_PLATFORM} STREQUAL "wx64") )
-    add_definitions( -DWINVER=0x501 )
-endif()
+project (MQTTClientI)
+#add_definitions( ${PRE_DEF} -D${PROJECT_NAME})
 
 # The version number.
-set (_VERSION_MAJOR 1)
-set (_VERSION_MINOR 4)
-set (_VERSION_PATCH 4)
+set (_VERSION_MAJOR 0)
+set (_VERSION_MINOR 0)
+set (_VERSION_PATCH 2)
+
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+	set (_OS_TYPE OS_Linux)
+else()
+	set (_OS_TYPE OS_WINS)
+endif()
+add_definitions( ${PRE_DEF} -D${_OS_TYPE})
 
 macro (add_sources)
     file (RELATIVE_PATH _relPath "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_LIST_DIR}")
