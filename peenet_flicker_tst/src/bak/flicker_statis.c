@@ -8,14 +8,14 @@
 
 #include "flicker_statis.h"
 
-static const int kSmpMthd = 2;  //sampling method. Sample every kSmpMthd
+#define kSmpMthd 2  //sampling method. Sample every kSmpMthd
 
 #ifdef PST_UINT32_T
-    static uint32_t *avrgin_[3];   //Average instantaneous flicker value buffer
-    static uint32_t *pst_buf_;     //buffer for pst statistics
+    static uint32_t avrgin_[3][12000/kSmpMthd];   //Average instantaneous flicker value buffer
+    //static uint32_t pst_buf_[12000/kSmpMthd];     //buffer for pst statistics
 #else
-    static float *avrgin_[3];  //Average instantaneous flicker value buffer
-    static float *pst_buf_;     //buffer for pst statistics
+    static float avrgin_[3][12000/kSmpMthd];  //Average instantaneous flicker value buffer
+    //static float pst_buf_[12000/kSmpMthd];     //buffer for pst statistics
 #endif
 
 static int tol_avrg_;      //Total number of average instantaneous flicker value for Pst statistics
@@ -23,6 +23,7 @@ static int pinsert_[3];    //The position where the new value will be inserted
 static float pst_[3];
 
 int flk_statis_tol_avrg() { return tol_avrg_; }
+void reset_pinsert() { memset(pinsert_, 0, sizeof(pinsert_)); }
 
 /*!
     Input:  tol -- Total number of instantaneous flicker value for Pst statistics
@@ -30,29 +31,7 @@ int flk_statis_tol_avrg() { return tol_avrg_; }
 void IniFlickerStatis(int tol)
 {
     tol_avrg_ = tol / kSmpMthd;
-    int i;
-    
-#ifdef PST_UINT32_T
-    for (i=0; i<3; i++) {
-        avrgin_[i] = malloc(sizeof(uint32_t)*tol_avrg_);
-    }
-    pst_buf_ = malloc(sizeof(uint32_t)*tol_avrg_);
-#else
-    for (i=0; i<3; i++) {
-        avrgin_[i] = malloc(sizeof(float)*tol_avrg_);
-    }
-    pst_buf_ = malloc(sizeof(float)*tol_avrg_);
-#endif
-    memset(pinsert_, 0, sizeof(pinsert_));
-}
-
-void DeFlickerStatis()
-{
-    free(pst_buf_);
-    int i;
-    for (i=0; i<3; i++) {
-        free(avrgin_[i]);
-    }
+    reset_pinsert();
 }
 
 /*!
@@ -130,12 +109,12 @@ static float PstStatis(uint8_t phs)
 {
 	int tol = tol_avrg_;
 #ifdef PST_UINT32_T
-    memcpy(pst_buf_, avrgin_[phs], sizeof(uint32_t)*tol);
-    uint32_t *dp = pst_buf_;
-	qsort(dp, tol, sizeof(float), CompareInt);
+    //memcpy(pst_buf_, avrgin_[phs], sizeof(uint32_t)*tol);
+    uint32_t *dp = avrgin_[phs];
+	qsort(dp, tol, sizeof(uint32_t), CompareInt);
 #else
-	memcpy(pst_buf_, avrgin_[phs], sizeof(float)*tol);
-	float *dp = pst_buf_;
+	//memcpy(pst_buf_, avrgin_[phs], sizeof(float)*tol);
+	float *dp = avrgin_[phs];
 	qsort(dp, tol, sizeof(float), CompareFloat);
 #endif
 

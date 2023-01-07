@@ -177,7 +177,7 @@ void MQTTClient::KeepConnect()
 {
     if (!data_buf_->status()) {
         AssociateMqttS();
-    } 
+    }
     
     if (data_buf_->status()==1) {
         Connect(data_buf_->rev(), flags_, kp_alv_);

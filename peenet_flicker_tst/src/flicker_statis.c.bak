@@ -8,8 +8,6 @@
 
 #include "flicker_statis.h"
 
-static const int kSmpMthd = 2;  //sampling method. Sample every kSmpMthd
-
 #ifdef PST_UINT32_T
     static uint32_t *avrgin_[3];   //Average instantaneous flicker value buffer
     static uint32_t *pst_buf_;     //buffer for pst statistics
@@ -23,6 +21,7 @@ static int pinsert_[3];    //The position where the new value will be inserted
 static float pst_[3];
 
 int flk_statis_tol_avrg() { return tol_avrg_; }
+static const int kSmpMthd = 2;  //sampling method. Sample every kSmpMthd
 
 /*!
     Input:  tol -- Total number of instantaneous flicker value for Pst statistics

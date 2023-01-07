@@ -19,9 +19,9 @@
 static const uint8_t kGroupMac[6] = {0xB1, 0xE0, 0x14, 0x03, 0x08, 0x01};
 static const uint8_t kBoyuuOUI[3] = {0xB0, 0xE0, 0x14};
 
-enum ParamType {kFirmVer, kDevModel, kADCBkgrdDC, kCorrFactor, kPT_CT, kCVT_C1C2, kCVTllRes, kSVType, kDesMAC45, kAppID, kParamTypeEnd};
+enum ParamType {kFirmVer, kDevModel, kADCBkgrdDC, kCorrFactor, kPT_CT, kCVT_C1C2, kCVTllRes, kSVType, kDesMAC45, kAppID, kCVTWireMethod, kParamTypeEnd};
 static const char *kParamName[] = {"FirmwareVer", "DeviceModel", "ADCBackgroudDC[4]", "CorrectFactor[4]",
-            "PT_CT[2]", "C1/C2(uF)", "R//C", "SV type(p,s)", "DesMAC[4/5]", "AppID(hex 4000~7fff)"};
+            "PT_CT[2]", "C1/C2(uF)", "R//C", "SV type(p,s)", "DesMAC[4/5]", "AppID(hex 4000~7fff)", "CVTWireMethod(0,2)"};
 
 enum DeviceModel {PQNet103D, PQNet204D, PQNet202CVT, PQNet202E1, PQNet202E2, PQNet101CVT, PQNet202E3, PQNet202Ex, PQNetxxx, DM_NoCard};
 static const char *DeviceModelStr[] = {"PQNet103D", "PQNet204D", "PQNet202CVT", "PQNet202E1", "PQNet202E2", 
@@ -134,7 +134,7 @@ int CommuForScnet::SetMacAddr(const uint8_t *mac, const uint8_t *dmac)
     return 0;
 }
 
-/*£¡
+/*!
 Save parameter to configuration file
 
     Input:  filename -- The configuration file used to store the parameters
@@ -165,6 +165,7 @@ void CommuForScnet::SaveParam(const char *filename, Para4Scnet *par)
     fprintf(fstrm, "%s=%c\n", kParamName[kSVType], ps[par->svtyp&1]);
     fprintf(fstrm, "%s=%02X:%02X\n", kParamName[kDesMAC45], par->des_mac[0], par->des_mac[1]);
     fprintf(fstrm, "%s=%X\n", kParamName[kAppID], par->app_id);
+    fprintf(fstrm, "%s=%d\n", kParamName[kCVTWireMethod], par->cvt_wire);
 
     fclose(fstrm);
 }
@@ -246,7 +247,10 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
             case kAppID:
                 fgets(stri, sizeof(stri), fstrm);
                 sscanf(stri, "=%hx", &par->app_id);
-                printf("dsagsdfag\n");
+                break;
+            case kCVTWireMethod:
+                fgets(stri, sizeof(stri), fstrm);
+                sscanf(stri, "=%hhd", &par->cvt_wire);
                 break;
             default:
                 break;
@@ -263,12 +267,13 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
     printf("%s=%d,%d\n", kParamName[kPT_CT], par->trns_rto[0], par->trns_rto[1]);
     printf("%s=%d\n", kParamName[kCVTllRes], par->cvt_prl_res);
     printf("%s=%d\n", kParamName[kSVType], par->svtyp);
+    printf("%s=%d\n", kParamName[kCVTWireMethod], par->cvt_wire);
 #endif
 
     return 0;
 }
 
-/*£¡
+/*!
 Get parameter from scnet
 
     Input:  filename -- The configuration file used to store the parameters
@@ -507,7 +512,7 @@ FILE *CommuForScnet::OpenUpFile(uint8_t *ver, const char *filename, int vdx, uin
     return fstrm;
 }
 
-/*£¡
+/*!
 Upgrade firmware
 
     Input:  filename -- firmware bin file
@@ -692,10 +697,16 @@ void CommuForScnet::SwapBytes(void *pnt, int nh, int type)
                     par->dbg16[i] = ntohs(par->dbg16[i]);
                     par->dbg32[i] = ntohl(par->dbg32[i]);
                 }
+                for (int i=0; i<3; i++) {
+                    par->pwrsply[i] = ntohl(par->pwrsply[i]);
+                }
             } else {
                 for (int i=0; i<8; i++) {
                     par->dbg16[i] = htons(par->dbg16[i]);
                     par->dbg32[i] = htonl(par->dbg32[i]);
+                }
+                for (int i=0; i<3; i++) {
+                    par->pwrsply[i] = htonl(par->pwrsply[i]);
                 }
             }
     } else {
@@ -788,13 +799,17 @@ int CommuForScnet::DebugCmd(uint8_t cmdn, const uint8_t *mac)
                             Debug4Scnet *par = &dbg4scnet_;
                             memcpy(par, &rbuf->data.dbg_inf, sizeof(dbg4scnet_));
                             SwapBytes(par, 1, 1);
-                            printf("DMA2_Stream0_IRQHandler()\n");
-                            printf("dbg16[0-3]=%05d %05d %05d %05d\n", par->dbg16[0], par->dbg16[1], par->dbg16[2], par->dbg16[3]);
-                            printf("CVTHandle()\n");
-                            printf("fifo_idc_[0,1].dc=%d,%d; max/min c1=%d/%d\n", par->dbg16[4], par->dbg16[5], par->dbg16[6], par->dbg16[7]);
-                            printf("udc=%d; max/min udc=%d/%d; smp_pns=%d\n", par->dbg32[0], par->dbg32[1], par->dbg32[2], par->dbg32[3]);
-                            printf("fifo_idc_[0,1].sum=%d,%d\n", par->dbg32[4], par->dbg32[5]);
-                            printf("fifo_udc_.sum=%13lld\n", par->dbg64[0]);
+                            printf("DMA2_Stream0_IRQHandler():\n");
+                            printf("  dbg16[0-3]=%05d %05d %05d %05d\n", par->dbg16[0], par->dbg16[1], par->dbg16[2], par->dbg16[3]);
+                            printf("CVTHandle():\n");
+                            printf("  fifo_idc_[c1,c2].dc=%d,%d; c1(max/min)=%d/%d\n", par->dbg16[4], par->dbg16[5], par->dbg16[6], par->dbg16[7]);
+                            printf("  udc(current/max/min)=%d/%d/%d; smp_pns=%d\n", par->dbg32[0], par->dbg32[1], par->dbg32[2], par->dbg32[3]);
+                            printf("  fifo_idc_[c1,c2].sum=%d,%d\n", par->dbg32[4], par->dbg32[5]);
+                            printf("  fifo_udc_.sum=%13lld\n", par->dbg64[0]);
+                            float di[3];
+                            for (int i=0; i<3; i++) di[i] = par->pwrsply[i]; 
+                            printf("Power supply(V) ADC_Read():\n");
+                            printf("  min/avg/max=%g/%g/%g\n", di[0]/1000, di[1]/1000, di[2]/1000);
                         }
                         retv = 0;
                         break;

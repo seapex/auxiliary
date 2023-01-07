@@ -1,4 +1,8 @@
 
++--------- V1.4.5 --------------------+
+2023-1-6
+  1. 修改 CommuForScnet::DebugCmd(), 优化调试信息显示格式，增加电源电压显示
+  2. 修改 CommuForScnet::SetParam()/LoadParam()等, 增加CVT接线方式的读取和设置功能
 +--------- V1.4.4 --------------------+
 2022-4-27
   1. 修改 CommuForScnet::Upgrade()/DebugCmd(), 优化升级流程, 完善打印信息
