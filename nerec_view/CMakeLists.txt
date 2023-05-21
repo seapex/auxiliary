@@ -1,14 +1,13 @@
 cmake_minimum_required (VERSION 2.8)
-project (CommuForSCNet) # Communication tool for SCNet
-
-if ( (${RUN_PLATFORM} STREQUAL "wx86") OR (${RUN_PLATFORM} STREQUAL "wx64") )
-    add_definitions( -DWINVER=0x501 )
+project (NERecView)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    add_definitions(-DOSbeWindows)
 endif()
 
 # The version number.
 set (_VERSION_MAJOR 1)
-set (_VERSION_MINOR 4)
-set (_VERSION_PATCH 7)
+set (_VERSION_MINOR 0)
+set (_VERSION_PATCH 0)
 
 macro (add_sources)
     file (RELATIVE_PATH _relPath "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_LIST_DIR}")
@@ -38,6 +37,16 @@ include_directories ("${PROJECT_BINARY_DIR}")
 
 # add the src/ to the search path for src files
 add_subdirectory (src bin)
+
+# Copy external dependency files.
+find_path(EMCTRL_PATH ".gitignore" "../../emctrl")
+message("EMCTRL_PATH: ${EMCTRL_PATH}")
+message("PROJECT_SOURCE_DIR: ${PROJECT_SOURCE_DIR}")
+configure_file (${EMCTRL_PATH}/common/data/ne_msg_dif.h ${PROJECT_SOURCE_DIR}/src COPYONLY)
+configure_file (${EMCTRL_PATH}/common/config/param_phd.h ${PROJECT_SOURCE_DIR}/src/misc COPYONLY)
+configure_file (${EMCTRL_PATH}/common/time/time_cst.cpp ${PROJECT_SOURCE_DIR}/src/misc COPYONLY)
+configure_file (${EMCTRL_PATH}/common/time/time_cst.h ${PROJECT_SOURCE_DIR}/src/misc COPYONLY)
+#file(COPY ${EMCTRL_PATH}/common/data/ne_msg_dif.h DESTINATION ${PROJECT_SOURCE_DIR}/src/misc)
 
 # build a CPack driven installer package
 include (InstallRequiredSystemLibraries)

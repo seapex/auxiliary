@@ -16,7 +16,8 @@ class CommuForScnet {
     typedef struct {
         uint8_t dev_model;  //Device model
         uint8_t cvt_wire;   //CVT wiring method. 2=method2(I3,I1), other=default(I2,I1)
-        uint8_t res1[2];
+        uint8_t sig_c1c2;   //Whether the C1/C2 signal is reversed? 1=yes, 0=no
+        uint8_t res1[1];
         int16_t adc_dc[4];  //Backgroud DC component of ADC. [0-3]:A-C, N(only for current)
         int32_t corr[4];    //Accuracy correction factor. [0-3]:A-C, N(only for current). unit:1/10000
         uint32_t trns_rto[2];   //transformer ratio. [0-1]:PT1,PT2 unit:V or CT1, CT2 unit:A

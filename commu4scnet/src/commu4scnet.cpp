@@ -19,9 +19,10 @@
 static const uint8_t kGroupMac[6] = {0xB1, 0xE0, 0x14, 0x03, 0x08, 0x01};
 static const uint8_t kBoyuuOUI[3] = {0xB0, 0xE0, 0x14};
 
-enum ParamType {kFirmVer, kDevModel, kADCBkgrdDC, kCorrFactor, kPT_CT, kCVT_C1C2, kCVTllRes, kSVType, kDesMAC45, kAppID, kCVTWireMethod, kParamTypeEnd};
+enum ParamType {kFirmVer, kDevModel, kADCBkgrdDC, kCorrFactor, kPT_CT, kCVT_C1C2, kCVTllRes, kSVType, kDesMAC45, kAppID, kCVTWireMethod, kCVTSigC1C2, kParamTypeEnd};
 static const char *kParamName[] = {"FirmwareVer", "DeviceModel", "ADCBackgroudDC[4]", "CorrectFactor[4]",
-            "PT_CT[2]", "C1/C2(uF)", "R//C", "SV type(p,s)", "DesMAC[4/5]", "AppID(hex 4000~7fff)", "CVTWireMethod(0,2)"};
+            "PT_CT[2]", "C1/C2(uF)", "R//C", "SV type(p,s)", "DesMAC[4/5]", "AppID(hex 4000~7fff)", "CVTWireMethod(0,2)",
+            "C1/C2 reversed"};
 
 enum DeviceModel {PQNet103D, PQNet204D, PQNet202CVT, PQNet202E1, PQNet202E2, PQNet101CVT, PQNet202E3, PQNet202Ex, PQNetxxx, DM_NoCard};
 static const char *DeviceModelStr[] = {"PQNet103D", "PQNet204D", "PQNet202CVT", "PQNet202E1", "PQNet202E2", 
@@ -166,6 +167,7 @@ void CommuForScnet::SaveParam(const char *filename, Para4Scnet *par)
     fprintf(fstrm, "%s=%02X:%02X\n", kParamName[kDesMAC45], par->des_mac[0], par->des_mac[1]);
     fprintf(fstrm, "%s=%X\n", kParamName[kAppID], par->app_id);
     fprintf(fstrm, "%s=%d\n", kParamName[kCVTWireMethod], par->cvt_wire);
+    fprintf(fstrm, "%s=%d\n", kParamName[kCVTSigC1C2], par->sig_c1c2);
 
     fclose(fstrm);
 }
@@ -188,20 +190,19 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
     int retv;
     float fi[4];
     for (int n=0; n<kParamTypeEnd; n++) {
-        retv = fscanf(fstrm, "%[^:=]", par_name);
-        if (retv==EOF) break;
+        if (fgets(stri, sizeof(stri), fstrm)==NULL) break;
+        sscanf(stri, "%[^:=#]%*[:=]%s", par_name, stri);
         int i, j;
         for (i=0; i<kParamTypeEnd; i++) {
-            if ( !strcmp(par_name, kParamName[i]) ) break;
+            if ( !strncmp(par_name, kParamName[i], strlen(kParamName[i])) ) break;
         }
         //printf("%s i=%d\n", par_name, i);
         switch (i) {
             case kFirmVer:
-                fscanf(fstrm, ":%d.%d.%d\n", &par->ver[0][0], &par->ver[0][1], &par->ver[0][2]);
+                sscanf(stri, "%d.%d.%d\n", &par->ver[0][0], &par->ver[0][1], &par->ver[0][2]);
                 break;
             case kDevModel:
-                fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%s", par_name);
+                sscanf(stri, "%s", par_name);
                 for (j=0; j<=PQNet202Ex; j++) {
                     if ( !strcmp(par_name, DeviceModelStr[j]) ) break;
                 }
@@ -212,45 +213,39 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
                 par->dev_model = j;
                 break;
             case kADCBkgrdDC:
-                fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%hd,%hd,%hd,%hd", &par->adc_dc[0], &par->adc_dc[1], &par->adc_dc[2], &par->adc_dc[3]);
+                sscanf(stri, "%hd,%hd,%hd,%hd", &par->adc_dc[0], &par->adc_dc[1], &par->adc_dc[2], &par->adc_dc[3]);
                 break;
             case kCorrFactor:
-                fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%f,%f,%f,%f", &fi[0], &fi[1], &fi[2], &fi[3]);
+                sscanf(stri, "%f,%f,%f,%f", &fi[0], &fi[1], &fi[2], &fi[3]);
                 for (j=0; j<4; j++) {
                     par->corr[j] = fi[j]*10000;
                 }
                 break;
             case kPT_CT:
-                fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%d,%d", &par->trns_rto[0], &par->trns_rto[1]);
+                sscanf(stri, "%d,%d", &par->trns_rto[0], &par->trns_rto[1]);
                 break;
             case kCVT_C1C2:
-                fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%f,%f", &fi[0], &fi[1]);
+                sscanf(stri, "%f,%f", &fi[0], &fi[1]);
                 memcpy(par->cvt_c1c2, fi, sizeof(par->cvt_c1c2));
                 break;
             case kCVTllRes:
-                fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%hd", &par->cvt_prl_res);
+                sscanf(stri, "%hd", &par->cvt_prl_res);
                 break;
             case kSVType:
-                fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%c", &j);
+                sscanf(stri, "%c", &j);
                 par->svtyp = j=='s'?1:0;
                 break;
             case kDesMAC45:
-                fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%hhx:%hhx", &par->des_mac[0], &par->des_mac[1]);
+                sscanf(stri, "%hhx:%hhx", &par->des_mac[0], &par->des_mac[1]);
                 break;
             case kAppID:
-                fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%hx", &par->app_id);
+                sscanf(stri, "%hx", &par->app_id);
                 break;
             case kCVTWireMethod:
-                fgets(stri, sizeof(stri), fstrm);
-                sscanf(stri, "=%hhd", &par->cvt_wire);
+                sscanf(stri, "%hhd", &par->cvt_wire);
+                break;
+            case kCVTSigC1C2:
+                sscanf(stri, "%hhd", &par->sig_c1c2);
                 break;
             default:
                 break;
@@ -268,6 +263,7 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
     printf("%s=%d\n", kParamName[kCVTllRes], par->cvt_prl_res);
     printf("%s=%d\n", kParamName[kSVType], par->svtyp);
     printf("%s=%d\n", kParamName[kCVTWireMethod], par->cvt_wire);
+    printf("%s=%d\n", kParamName[kCVTSigC1C2], par->sig_c1c2);
 #endif
 
     return 0;
@@ -715,7 +711,6 @@ void CommuForScnet::SwapBytes(void *pnt, int nh, int type)
                 for (int i=0; i<4; i++) {
                     par->adc_dc[i] = ntohs(par->adc_dc[i]);
                     par->corr[i] = ntohl(par->corr[i]);
-                    par->adc_dc[i] = ntohs(par->adc_dc[i]);
                 }
                 for (int i=0; i<2; i++) {
                     par->trns_rto[i] = ntohl(par->trns_rto[i]);
@@ -727,7 +722,6 @@ void CommuForScnet::SwapBytes(void *pnt, int nh, int type)
                 for (int i=0; i<4; i++) {
                     par->adc_dc[i] = htons(par->adc_dc[i]);
                     par->corr[i] = htonl(par->corr[i]);
-                    par->adc_dc[i] = htons(par->adc_dc[i]);
                 }
                 for (int i=0; i<2; i++) {
                     par->trns_rto[i] = htonl(par->trns_rto[i]);

@@ -10,6 +10,7 @@
 #include "cyc150_save.h"
 #include "loopbuf_sort.h"
 #include "generic.h"
+#include <math_ext.h>
 
 /*!
 Convert time_t to tm, it's thread-safe
@@ -26,7 +27,7 @@ void time_t2tm(struct tm *des, const time_t *src)
 /*!
 Show help information
 
-    Input:  t -- 1=cycle10, 2=cycle150, 3=cycle10 harmonic
+    Input:  t -- 1=cycle10, 2=cycle150
 */
 const char *app_name_;
 void ShowHelp(int t)
@@ -35,14 +36,13 @@ void ShowHelp(int t)
         case 1:
             printf(" Usage: %s filename index\n", app_name_);
             printf("        %s filename type [orders]\n", app_name_);
-            printf("\ttype -- frq, pst, thd, harm orders\n");
+            printf("\ttype -- rms, seq, thd, harm orders, frq, pst\n");
             break;
         case 2:
             printf(" Usage: %s filename index [ac_dc]\n", app_name_);
-            printf("\tac_dc -- 0=AC, 1=DC\n", app_name_);
-            break;
-        case 3:
-            printf(" Usage: %s filename harm orders\n", app_name_);
+            printf("        %s filename type [orders] [ac_dc]\n", app_name_);
+            printf("\ttype -- rms, seq, thd, harm [orders]\n");
+            printf("\tac_dc -- 0=AC, 1=DC\n");
             break;
         default:
             printf(" Usage: %s filename(*.150, *.ten or *.status)\n", app_name_);
@@ -128,6 +128,7 @@ bool ShowRec10(FILE *f_strm, CycxxFileHead *rcdhd, int idx)
     return true;
 }
 
+enum DataType {kDTpRMS, kDTpSeq, kDTpTHD, kDTpHarm, kDTpFrq, kDTpPst};
 /*!
 show single type of 10cycle record
 
@@ -138,37 +139,72 @@ show single type of 10cycle record
 */
 bool ShowRec10Sgl(FILE *f_strm, CycxxFileHead *rcdhd, char *type, int orders)
 {
-    MeasVCyc10LD cyc10;
     if (rcdhd->version!=1) {
         printf("record version mismatch:%d\n", rcdhd->version);
         return false;
     }
-        
+
+    int tpi;
+    printf("SN,Time,");
+    if (!strcmp(type, "rms")) {
+        printf("Ua,Ub,Uc,Uab,Ubc,Uca,Ia,Ib,Ic\n");
+        tpi = kDTpRMS;
+    } else if (!strcmp(type, "seq")) {
+        printf("Uzero,Upos,Uneg,Izero,Ipos,Ineg\n");
+        tpi = kDTpSeq;
+    } else if (!strcmp(type, "thd")) {
+        printf("A,B,C\n");
+        tpi = kDTpTHD;
+    } else if (!strcmp(type, "hrm")) {
+        if (orders<=0) {
+            ShowHelp(1);
+            return false;
+        }
+        printf("Ua,Ub,Uc,Ia,Ib,Ic\n");
+        tpi = kDTpHarm;
+    } else if (!strcmp(type, "frq")) {
+        printf("frequency\n");
+        tpi = kDTpFrq;
+    } else if (!strcmp(type, "pst")) {
+        printf("A,B,C\n");
+        tpi = kDTpPst;
+    } else {
+        printf("unknown data type!\n");
+        return false;
+    }
+    
+    MeasVCyc10LD cyc10;
+    struct tm tmx;
     for (int i=0; i<rcdhd->count; i++) {
         int k = fread(&cyc10, sizeof(cyc10), 1, f_strm);
         if (k != 1) {
             printf("read file error!\n");
             return false;
         }
-        if (!strcmp(type, "frq")) {
-            if (cyc10.frq>=0) printf("%04d frq  = %7g\n", i+1, cyc10.frq);
-        } else if (!strcmp(type, "pst")) {
-            if (cyc10.pst[0]>=0) printf("%04d pst  = %7g, %7g, %7g\n", i+1, cyc10.pst[0], cyc10.pst[1], cyc10.pst[2]);
-        } else if (!strcmp(type, "thd")) {
-            printf("%04d thd  = %7g, %7g, %7g\n", i+1, cyc10.thd[0], cyc10.thd[1], cyc10.thd[2]);
-        } else if (!strcmp(type, "harm")) {
-            if (orders<=0) {
-                ShowHelp(3);
+        time_t2tm(&tmx, &cyc10.time.tv_sec);
+        printf("%04d, %02d:%02d:%02d.%03d, ", i+1,  tmx.tm_hour, tmx.tm_min, tmx.tm_sec, cyc10.time.tv_usec/1000);
+        switch (tpi) {
+            case kDTpRMS:
+                printf("%9g, %9g, %9g, %9g, %9g, %9g, %9g, %9g, %9g\n", cyc10.rms_u[0][0], cyc10.rms_u[0][1], cyc10.rms_u[0][2], cyc10.rms_u[1][0], cyc10.rms_u[1][1], cyc10.rms_u[1][2],
+                        cyc10.rms_i[0], cyc10.rms_i[1], cyc10.rms_i[2]);
                 break;
-            }
-            int j = orders;
-            printf("%04d hrm_amp_u  = %7g, %7g, %7g\n", i+1, cyc10.hrm_amp_u[0][j], cyc10.hrm_amp_u[1][j], cyc10.hrm_amp_u[2][j]);
-            printf("%04d ihrm_amp_u  = %7g, %7g, %7g\n", i+1, cyc10.ihrm_amp_u[0][j], cyc10.ihrm_amp_u[1][j], cyc10.ihrm_amp_u[2][j]);
-            printf("%04d hrm_amp_i  = %7g, %7g, %7g\n", i+1, cyc10.hrm_amp_i[0][j], cyc10.hrm_amp_i[1][j], cyc10.hrm_amp_i[2][j]);
-            printf("%04d ihrm_amp_i  = %7g, %7g, %7g\n", i+1, cyc10.ihrm_amp_i[0][j], cyc10.ihrm_amp_i[1][j], cyc10.ihrm_amp_i[2][j]);
-        } else {
-            printf("unknown data type!\n");
-            return false;
+            case kDTpSeq:
+                printf("%9g, %9g, %9g\n", cyc10.seq[0][1], cyc10.seq[0][1], cyc10.seq[0][1], cyc10.seq[1][1], cyc10.seq[1][1], cyc10.seq[1][1]);
+                break;
+            case kDTpTHD:
+                printf("%9g, %9g, %9g\n", cyc10.thd[0], cyc10.thd[1], cyc10.thd[2]);
+                break;
+            case kDTpHarm:
+                printf("%9g, %9g, %9g, %9g, %9g, %9g\n", cyc10.hrm_amp_u[0][orders], cyc10.hrm_amp_u[1][orders], cyc10.hrm_amp_u[2][orders], cyc10.hrm_amp_i[0][orders], cyc10.hrm_amp_i[1][orders], cyc10.hrm_amp_i[2][orders]);
+                break;
+            case kDTpFrq:
+                if (cyc10.frq>=0) printf("%9g\n", cyc10.frq);
+                break;
+            case kDTpPst:
+                if (cyc10.pst[0]>=0) printf("%9g, %9g, %9g\n", cyc10.pst[0], cyc10.pst[1], cyc10.pst[2]);
+                break;
+            default:
+                break;
         }
     }
     return true;
@@ -201,7 +237,7 @@ bool ShowRec150(FILE *f_strm, CycxxFileHead *rcdhd, int idx, int ac_dc)
     printf("rms = [%8.3f %8.3f %8.3f][%8.3f %8.3f %8.3f]\n", cyc150.rms[0][0], cyc150.rms[0][1], cyc150.rms[0][2],
                                     cyc150.rms[1][0], cyc150.rms[1][1], cyc150.rms[1][2]);
     if (!ac_dc) {
-        printf("seq = %8.3f %8.3f %8.3\n", cyc150.ac.seq[0], cyc150.ac.seq[1], cyc150.ac.seq[2]);
+        printf("seq = %8.3f %8.3f %8.3f\n", cyc150.ac.seq[0], cyc150.ac.seq[1], cyc150.ac.seq[2]);
         printf("thd = %7.3f %7.3f %7.3f\n", cyc150.ac.thd[0], cyc150.ac.thd[1], cyc150.ac.thd[2]);
     }
     
@@ -231,6 +267,71 @@ bool ShowRec150(FILE *f_strm, CycxxFileHead *rcdhd, int idx, int ac_dc)
 }
 
 /*!
+show single type of 150cycle record
+
+    Input:  f_strm -- record file stream be opened
+            rcdhd -- record file head
+            type -- data type
+            orders -- harmonic orders
+*/
+bool ShowRec150Sgl(FILE *f_strm, CycxxFileHead *rcdhd, char *type, int orders)
+{
+    int tpi;
+    printf("SN,Time,");
+    if (!strcmp(type, "rms")) {
+        printf("AN,BN,CN,AB,BC,CA\n");
+        tpi = kDTpRMS;
+    } else if (!strcmp(type, "seq")) {
+        printf("zero,pos,neg\n");
+        tpi = kDTpSeq;
+    } else if (!strcmp(type, "thd")) {
+        printf("A,B,C\n");
+        tpi = kDTpTHD;
+    } else if (!strcmp(type, "hrm")) {
+        if (orders<=0) {
+            ShowHelp(2);
+            return false;
+        }
+        if (orders==1) printf("ampA,ampB,ampC,angA,angB,angC\n");
+        else printf("hrA,hrB,hrC,ampA,ampB,ampC,angA,angB,angC\n");
+        tpi = kDTpHarm;
+    } else {
+        printf("unknown data type!\n");
+        return false;
+    }
+
+    MeasVChnl3s cyc150;
+    struct tm tmx;
+    for (int i=0; i<rcdhd->count; i++) {
+        int k = fread(&cyc150, sizeof(cyc150), 1, f_strm);
+        if (k != 1) {
+            printf("read file error!\n");
+            return false;
+        }
+        time_t2tm(&tmx, &cyc150.time);
+        printf("%04d, %02d:%02d:%02d, ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec);
+        switch (tpi) {
+            case kDTpRMS:
+                printf("%9g, %9g, %9g, %9g, %9g, %9g\n", cyc150.rms[0][0], cyc150.rms[0][1], cyc150.rms[0][2], cyc150.rms[1][0], cyc150.rms[1][1], cyc150.rms[1][2]);
+                break;
+            case kDTpSeq:
+                printf("%9g, %9g, %9g\n", cyc150.ac.seq[0], cyc150.ac.seq[1], cyc150.ac.seq[1]);
+                break;
+            case kDTpTHD:
+                printf("%9g, %9g, %9g\n", cyc150.ac.thd[0], cyc150.ac.thd[1], cyc150.ac.thd[2]);
+                break;
+            case kDTpHarm:
+                if (orders==1) printf("%9g, %9g, %9g, %9g, %9g, %9g\n", cyc150.hrm_amp[0][orders], cyc150.hrm_amp[1][orders], cyc150.hrm_amp[2][orders], cyc150.hrm_ang[0][orders], cyc150.hrm_ang[1][orders], cyc150.hrm_ang[2][orders]);
+                else printf("%9g, %9g, %9g, %9g, %9g, %9g, %9g, %9g, %9g\n", cyc150.hr[0][orders], cyc150.hr[1][orders], cyc150.hr[2][orders], cyc150.hrm_amp[0][orders], cyc150.hrm_amp[1][orders], cyc150.hrm_amp[2][orders], cyc150.hrm_ang[0][orders], cyc150.hrm_ang[1][orders], cyc150.hrm_ang[2][orders]);
+                break;
+            default:
+                break;
+        }
+    }
+    return true;
+}
+
+/*!
 Show record
 
     Input:  filename
@@ -241,7 +342,7 @@ bool ShowRec(char *filename, char *ext, char *arg[])
 {
     bool ret = false;
     CycxxFileHead rcdhd;
-    int i, j, k, idx;
+    int i, j, k=0, idx;
     FILE *f_strm = fopen(filename, "rb");
     if (f_strm) {   //File be opened successfully
         i = fread(&rcdhd, sizeof(rcdhd), 1, f_strm);
@@ -254,13 +355,13 @@ bool ShowRec(char *filename, char *ext, char *arg[])
                 if(arg[3]) adc = atoi(arg[3]);
                 ret = ShowRec150(f_strm, &rcdhd, atoi(arg[2]), adc);
             } else {
-                ShowHelp(2);
+                if (arg[3]) k = atoi(arg[3]);
+                ret = ShowRec150Sgl(f_strm, &rcdhd, arg[2], k);
             }
         } else if (!strcmp(ext, "ten")) {
             if (IsInt(arg[2])) {
                 ret = ShowRec10(f_strm, &rcdhd, atoi(arg[2]));
             } else {
-                k = 0;
                 if (arg[3]) k = atoi(arg[3]);
                 ret = ShowRec10Sgl(f_strm, &rcdhd, arg[2], k);
             }

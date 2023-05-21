@@ -1,15 +1,16 @@
 ﻿/*! 
-文件保存路径: save/cyc10/LDx.  x 为逻辑设备编号, 1,2,...
-文件名: LDx_yyyyMMdd_hhmm.ten.  e.g. LD1_20191013_0907.ten
+文件保存路径: save/cyc150/Chnlx.  x 为通道编号, 1,2,...
+文件名: Chnlx_yyyyMMdd_hhmm.150.  e.g. Chnl1_20191013_0907.150
 文件格式:
     head:CycxxFileHead
-    record1:MeasVCyc10LD
-    record2:MeasVCyc10LD
+    record1:MeasVChnl3s
+    record2:MeasVChnl3s
     ...
 
 字节序: Little endian
 每个文件保存时长:1-60分钟可设
 */
+
 #ifndef _CYC150_SAVE_H_
 #define _CYC150_SAVE_H_
 
