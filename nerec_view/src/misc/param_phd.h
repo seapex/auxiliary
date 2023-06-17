@@ -40,7 +40,6 @@ struct NewEnergyParam {
     uint8_t ena;        //new energy enable. 0=disable, 1=enable
     uint8_t num[2];     //Number of 10-minute data stores. [0-1]:running, background
     uint8_t spc[5];     //save space. uint:s. 113=0.2s. [0-4]:freq, harm, unbalance, voltage deviation, reserved
-    int32_t pwr;        //Rated power. unit:kW
 };
 
 enum PQParaType { kPQParaFreq, kPQParaHrm, kPQParaUnblc,

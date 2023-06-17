@@ -3,26 +3,27 @@ set (EXE_TARGET "mqtt_client")
 #message("EXE_TARGET: ${EXE_TARGET}")
 message("_OS_TYPE: ${_OS_TYPE}")
 
-add_sources(main.cpp thrd_socket.cpp thrd_timer.cpp mqtt_client.cpp parse_optn_mqttc.cpp)
 set(COMMON_PATH "/home/works/emctrl/common")
-
-include(${COMMON_PATH}/commu/CMakeLists.txt)
-include(CMakeLists4commu_mqttc.txt)
-
+set(COMMU_PATH "${COMMON_PATH}/commu")
+include(${COMMU_PATH}/buffer/mqttc/CMakeLists.txt)
+include(${COMMU_PATH}/CMakeLists.txt)
+add_sources(${COMMU_PATH}/socket_client.cpp)
+add_sources(${COMMU_PATH}/protocol/phy_prtcl_mqttc.cpp)
+add_sources(${COMMU_PATH}/protocol/app_prtcl_mqttc.cpp)
+include(${COMMON_PATH}/config/CMakeLists.txt)
 include(${COMMON_PATH}/data/CMakeLists.txt)
 add_sources(${COMMON_PATH}/data/messageq_client.cpp ${COMMON_PATH}/data/messageq_mqttc.cpp)
-
 include(${COMMON_PATH}/parse_optn/CMakeLists.txt)
 include(${COMMON_PATH}/misc/CMakeLists.txt)
+include(${COMMON_PATH}/mqtt_client/CMakeLists.txt)
 include(${COMMON_PATH}/thread/CMakeLists.txt)
 include(${COMMON_PATH}/time/CMakeLists.txt)
 
-include_directories (config data)
-aux_source_directory(config CONFIG_SRC)
-aux_source_directory(data DATA_SRC)
+add_sources(main.cpp thrd_socket.cpp thrd_timer.cpp parse_optn_mqttc.cpp)
+include_directories (test)
+aux_source_directory(test TEST_SRC)
 
-set ( SRC_LIST ${SRC_LIST} ${CONFIG_SRC} ${DATA_SRC})
-message("SRC_LIST=${SRC_LIST}")
+set ( SRC_LIST ${SRC_LIST} ${TEST_SRC})
 
 #set (EXTRA_LIBS ${EXTRA_LIBS} pthread dl)
 set (EXTRA_LIBS ${EXTRA_LIBS} m pthread z)

@@ -15,26 +15,31 @@ const char *kCmdName[kCmdTypeEnd] = {
     };
 
 //main command
-static const char * main_sopts = "hV:d::crq:t:m:";
+static const char * main_sopts = "hVd::rq:t:m:";
 static const option main_lopts[] = {
     { "help",    0, 0, 'h' },
+    { "version", 0, 0, 'V' },
     { "debug",   2, 0, 'd' },
     { "pub",     0, 0, 0x80 },
     { "sub",     0, 0, 0x81 },
+    { "tstpqm",  1, 0, 0x82 },
     { NULL,      0, 0, 0 },
 };
 static const char * main_help =
     "Usage: "MAIN_PROG" [option]\n"
     "       -h, --help      Print help information\n"
-    "       -V protocol-version\n"
+    "       -V, --version   Print version information\n"
     "       -dn --debug=n   Show debug information\n"
-    "       -c              clean start\n"
     "       -r              RETAIN=1\n"
-    "       -q n            QoS. n=0,1; default to 1\n"
+    "       -q n            QoS. n=0,1(default)\n"
     "       --pub           send PUBLISH\n"
     "       --sub           send SUBSCRIBE\n"
     "       -t topic        PUBLISH topic\n"
     "       -m message      PUBLISH message\n"
+    "       --tstpqm n      test pqm function. n is func code\n"
+    "                       1 clear new energy record.\n"
+    "                       2 get new energy record status.\n"
+    "                       3 get new energy record.\n"
 ;
 
 ParseOptnMqttC::ParseOptnMqttC()
@@ -59,7 +64,6 @@ void ParseOptnMqttC::InitParam()
 
     debug_ = 0;
     ver_ = 4;
-    clean_ = 0;
     memset(send_, 0, sizeof(send_));
     retain_ = 0;
     qos_ = 1;
@@ -72,6 +76,7 @@ void ParseOptnMqttC::InitParam()
     n = strlen(stri);
     msg_ = new char[n+1];
     strcpy(msg_, stri);
+    tstpqm_ = 0;
 }
 
 /*!
@@ -83,8 +88,8 @@ int ParseOptnMqttC::HandleMain(int opt, char *arg)
 {
     switch (opt) {
         case 'V':
-            if (atoi(optarg)==5) ver_ = 5;
-            break;
+            printf(MAIN_PROG" version %d.%d.%d\n", _VERSION_MAJOR, _VERSION_MINOR, _VERSION_PATCH);
+            return -1;
         case 'd':
             if (optarg){
                 debug_ = atoi(optarg);
@@ -92,9 +97,6 @@ int ParseOptnMqttC::HandleMain(int opt, char *arg)
                 debug_ = 1;
             }
             //return 2;
-            break;
-        case 'c':
-            clean_ = 1;
             break;
         case 'q':
             if (optarg){
@@ -109,6 +111,10 @@ int ParseOptnMqttC::HandleMain(int opt, char *arg)
         case 0x80:
         case 0x81:
             send_[opt-0x80] = 1;
+            break;
+        case 0x82:
+            tstpqm_ = atoi(optarg);
+            printf("tstpqm_=%d\n", tstpqm_);
             break;
         case 't':
             if (topic_) delete [] topic_;

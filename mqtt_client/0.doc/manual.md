@@ -23,4 +23,28 @@ sock_clnt_->Start(, , , , ass_idx_+1);
               co_idx_ = ass_idx_;
 data_buf_ = data_bufs().buf(ass_idx_);
 ```
-
+## mqtt_client.conf
+```bash
+HostName=192.168.1.3
+PortName=1883
+DeviceID=PQNet300D000003
+ConnectFlags=00  # hexadecimal number
+SubTopics=seapex/test1/#,05;seapex/test2/#,05;,;,;,;    # topic,option(hex); 
+```
+## usage
+```bash
+MAIN_PROG [option]
+    -h, --help      Print help information
+    -V, --version   Print version information
+    -dn --debug=n   Show debug information
+    -r              RETAIN=1
+    -q n            QoS. n=0,1(default)
+    --pub           send PUBLISH
+    --sub           send SUBSCRIBE
+    -t topic        PUBLISH topic
+    -m message      PUBLISH message
+    --tstpqm n      test pqm function. n is func code\n"
+                    1 clear new energy record.\n"
+                    2 get new energy record status.\n"
+                    3 get new energy record.\n"
+```

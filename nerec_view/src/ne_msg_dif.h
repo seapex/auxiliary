@@ -10,18 +10,24 @@
 
 #include "param_phd.h"
 
+/*! 10-minute record save file name format
+LDx_yyyyMMddThhmmss.nexx.
+nexx 中的 xx为数字, 代表功率区间.  00=bgdata, 01=0~10%, 02=10~20%, ... 10=90~100%. 
+e.g. LD1_20230407T175057.ne02
+*/
+
 /*! 10-minute record save file structure description
-struct NETestSaveFile {
+
     NETestFileHead file_head;
     //file body
         //data block1
         NETestBlockHead blk_head1;
-        NETestRecXXX data1[blk_head1.num];
+        NETestDataXXX data1[blk_head1.num];
         //data block2
         NETestBlockHead blk_head2;
-        NETestRecXXX data2[blk_head2.num];
+        NETestDataXXX data2[blk_head2.num];
         //...
-} //*/
+*/
 
 struct NETestFileHead { // New energy test data save file head
     uint8_t ver;    // The version of this structure. =0
@@ -30,11 +36,12 @@ struct NETestFileHead { // New energy test data save file head
     uint8_t compress;   // Compression algorithm for file body. 0=No compress, 1=zlib
     uint32_t len[2];    // Length of the file body(exclude size of the head). 
                         // [0-1]:length, compressed length.
+    int32_t rated_pwr;  //Rated power. unit:kW
 };
 
 struct NETestBlockHead { //data block head
     uint16_t type;  //data block type. 0=freq, 1=harmonic, 2=unbalance, 3=voltage deviation, 4=Pst
-    uint16_t num;   //number of records in the data block
+    uint16_t num;   //number of data in the data block
     uint32_t len;   //length of the data block(exclude size of the head)
     uint8_t reserved[4];
 };
@@ -46,7 +53,7 @@ struct NETestDataFreq {  //frequency data
 
 struct NETestDataHarm {  //harmonic data
     timeval time;
-    float hru[3][kMaxHarmNum+1];    //voltage harmonic ratio. unit:%. [0-2]:A-C. [0-50]:0-1 no use, 2-50 order.
+    float hru[3][kMaxHarmNum+1];    //voltage harmonic ratio. unit:%. [0-2]:A-C. [0-50]:0-1 amplitude uint:V, 2-50 order.
     float ha[3][kMaxHarmNum+1];     //current harmonic. unit:A. [0-2]:A-C. [0-50]:0-50 order.
     float ihru[3][kMaxHarmNum+1];   //voltage interharmonic ratio. unit:%. [0-2]:A-C. [0-50]:0-50 order.
     float iha[3][kMaxHarmNum+1];    //current interharmonic. unit:A. [0-2]:A-C. [0-50]:0-50 order.
@@ -60,7 +67,7 @@ struct NETestDataUnblc { //unbalance data
 
 struct NETestDataUdev {  //voltage deviation data
     timeval time;
-    float dev_u[3][2];  //deviation voltage. [0-2]:A-C. [0-1]:under, over. unit:V
+    float u_dev[3][2];  //voltage deviation. [0-2]:A-C. [0-1]:under, over. unit:%
 };
 
 struct NETestDataPst {   //Pst data
@@ -84,7 +91,7 @@ struct NETestStatus {   //Status of 10-minute records
     uint16_t cnt;   //Count of status changes
     uint8_t rec_num[16];    //Number of 10-minute records. [0-10]:bgdata,0~10%,10~20%,...,90~100%. [11-15]:reserved
     NERecTime times[10][16];    //running record times(end time). [0-9]:0~10%,10~20%,...,90~100%.
-    NERecTime bg_tms[255];  //background record times.
+    NERecTime bg_tms[255];  //background record times(end time).
 };
 
 #endif // _NE_MSG_DIF_H_

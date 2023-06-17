@@ -32,26 +32,15 @@ void *ThrdTimer(void *myarg)
         if (cnt_dot1s%100 == 0) { //10s
             minor_type |= kTenSecond;
         }
-        if (cnt_dot1s%50 == 0) { //5s
-            minor_type |= kFiveSecond;
-        }
         if (cnt_dot1s%30 == 0) { //3s
-            minor_type |= kThreeSecond;
             g_thread_cnt[cnode->threadnum]++; //Increase this thread count
+            minor_type |= kThreeSecond;
         }
         if (cnt_dot1s%10 == 0) { //1s
             minor_type |= kOneSecond;
-            messageq_mqttc().IncreaseCount();
+            NoticePthread(kTTMain, kPTimerInfo, minor_type, NULL);
         }
         if (cnt_dot1s%5 == 0) { //0.5s
-            minor_type |= kDot5Second;
-            if (cnt_dot1s&1) {
-                NoticePthread(kTTMain, kPTimerInfo, minor_type, NULL);
-            }
-        }
-        if (cnt_dot1s%2 == 0) { //0.2s
-            minor_type |= kDot2Second;
-            NoticePthread(kTTMain, kPTimerInfo, minor_type, NULL);
         }
     }
     NoticeClrq(cnode);

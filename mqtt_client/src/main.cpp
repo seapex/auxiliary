@@ -15,17 +15,18 @@
 #include "thread_mng.h"
 #include "socket_client.h"
 #include "messageq_mqttc.h"
-#include "data_bufs.h"
-#include "param_cfg.h"
+#include "mqttc_bufs.h"
+#include "mqttc_para.h"
 #include "mqtt_client.h"
 #include "debug_info.h"
+#include "test_pqm.h"
 
 static int numthreads_; //线程数(不包括主线程)
 
 void *ThrdTimer(void *myarg);
 void *ThrdSocketMqttC(void *myarg);
 
-SocketClient *g_sock_client = NULL;
+SocketClient *g_sock_mqttc = NULL;
 static const int CNNCT_MAX = 3; //最多建立3个socket连接
 static MQTTClient *mqtt_client_=NULL;
 
@@ -78,17 +79,17 @@ void InitValues()
     TimeCstInit();
 
     messageq_mqttc().InitQueue(CNNCT_MAX);
-    data_bufs().Initialize(CNNCT_MAX);
-    g_sock_client = new SocketClient(CNNCT_MAX);
-    g_sock_client->set_idle_tmout(300*60);  //300 minute
-    mqtt_client_ = new MQTTClient(g_sock_client);
+    mqttc_bufs().Initialize(CNNCT_MAX);
+    g_sock_mqttc = new SocketClient(CNNCT_MAX);
+    g_sock_mqttc->set_idle_tmout(300*60);  //300 minute
+    mqtt_client_ = new MQTTClient(g_sock_mqttc);
 }
 
 void CleanupValues()
 {
     printf("Cleanup values..\n");
     if (mqtt_client_) delete mqtt_client_;
-    if (g_sock_client) delete g_sock_client;
+    if (g_sock_mqttc) delete g_sock_mqttc;
     
     TimeCstEnd();
 }
@@ -147,17 +148,11 @@ void OnTerminal()
 
 void HandlePtmr(int subtype)
 {
-    static int cnti = 0;
-    if (subtype&kDot5Second) {
+    if (subtype&kOneSecond) {  //kOneSecond kFiveSecond
         mqtt_client_->KeepConnect();
     }
-    if (subtype&kOneSecond) {
-        if (!mqtt_client_->session()) {
-            char *topics[kMaxSubPayNum];
-            uint8_t optns[kMaxSubPayNum];
-            int n = param_cfg().SubPayload(topics, optns);
-            mqtt_client_->Subscribe(topics, optns, n);
-        }
+    if (subtype&kOneMinute) {
+        mqtt_client_->Ping();
     }
 }
 
@@ -207,33 +202,36 @@ int main(int argc, char *argv[])
     IniSignal();
     printf ("program is running, hit ^c to exit ... \n");
     
-    mqtt_client_->AssociateMqttS();
-    msSleep(500);
-    uint8_t flags = 0;
-    flags |= parse_opt.clean()<<1;
-    mqtt_client_->Connect(parse_opt.ver(), flags, 120);
-    msSleep(1000);
-    
-    if (parse_opt.send(kMsgSubscribe)) {
-        char *topics[kMaxSubPayNum];
-        uint8_t optns[kMaxSubPayNum];
-        int n = param_cfg().SubPayload(topics, optns);
-        mqtt_client_->Subscribe(topics, optns, n);
+    for (int i=0; i<6 && mqtt_client_->AssociateMqttS(); i++) {
         msSleep(1000);
     }
 
-    if (parse_opt.send(kMsgPublish)) {
-        const char *msg = parse_opt.msg();
-        uint8_t flag = parse_opt.retain();
-        flag |= parse_opt.qos()<<1;
-        mqtt_client_->Publish(flag, parse_opt.topic(), (const uint8_t *)msg, strlen(msg));
-        msSleep(1000);
+    mqtt_client_->Connect();
+
+    if (parse_opt.tstpqm()) {
+        TestPQM(parse_opt.tstpqm(), mqtt_client_);
+    } else {
+        if (parse_opt.send(kMsgSubscribe)) {
+            mqtt_client_->Subscribe();
+        }
+
+        if (parse_opt.send(kMsgPublish)) {
+            const char *msg = parse_opt.msg();
+            uint8_t flag = parse_opt.retain();
+            flag |= parse_opt.qos()<<1;
+            mqtt_client_->Publish(flag, parse_opt.topic(), (const uint8_t *)msg, strlen(msg));
+        }
     }
 
     //mqtt_client_->Disconnect();
     WorkNode wnode;
     const int kTmOut = 100;   //unit:ms
+    for (;;) {  //Clear the thread queue -- g_mainq
+        PthreadCondWait(&wnode, &g_mainq, kTmOut);
+        if (wnode.major_type == 42767) break;
+    }
     while (retval_ != 107) {
+        //break;
         g_thread_cnt[kMainProcessNum]++; //Increase this thread count
         if (PthreadCondWait(&wnode, &g_mainq, kTmOut)) break;
 

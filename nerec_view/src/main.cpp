@@ -45,7 +45,11 @@ void ShowFreq(uint8_t *buf, int num)
     for (int i=0; i<num; i++) {
         memcpy(&data, buf, sizeof(data));
         time_t2tm(&tmx, &data.time.tv_sec, 1);
-        printf("%04d %02d:%02d:%02d.%03d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec, data.time.tv_usec/1000);
+        if (num<1000) {
+            printf("%03d %02d:%02d:%02d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec);
+        } else {
+            printf("%04d %02d:%02d:%02d.%03d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec, data.time.tv_usec/1000);
+        }
         printf("%.3f Hz\n", data.freq);
         buf += sizeof(data);
     }
@@ -64,7 +68,7 @@ void ShowUnblc(uint8_t *buf, int num)
     for (int i=0; i<num; i++) {
         memcpy(&data, buf, sizeof(data));
         time_t2tm(&tmx, &data.time.tv_sec, 1);
-        printf("%04d %02d:%02d:%02d.%03d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec, data.time.tv_usec/1000);
+        printf("%03d %02d:%02d:%02d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec);
         printf("%.3f %.3f %.3f; %.3f %.3f %.3f\n", data.seq[0][0], data.seq[0][2], data.seq[0][1], 
                 data.seq[1][0], data.seq[1][2], data.seq[1][1]);
         buf += sizeof(data);
@@ -84,9 +88,13 @@ void ShowUdev(uint8_t *buf, int num)
     for (int i=0; i<num; i++) {
         memcpy(&data, buf, sizeof(data));
         time_t2tm(&tmx, &data.time.tv_sec, 1);
-        printf("%04d %02d:%02d:%02d.%03d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec, data.time.tv_usec/1000);
-        printf("%.3f %.3f; %.3f %.3f; %.3f %.3f\n", data.dev_u[0][0], data.dev_u[0][1], 
-                data.dev_u[1][0], data.dev_u[1][1], data.dev_u[2][0], data.dev_u[2][1]);
+        if (num<1000) {
+            printf("%03d %02d:%02d:%02d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec);
+        } else {
+            printf("%04d %02d:%02d:%02d.%03d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec, data.time.tv_usec/1000);
+        }
+        printf("%.3f %.3f; %.3f %.3f; %.3f %.3f %%\n", data.u_dev[0][0], data.u_dev[0][1], 
+                data.u_dev[1][0], data.u_dev[1][1], data.u_dev[2][0], data.u_dev[2][1]);
         buf += sizeof(data);
     }
 }
@@ -104,7 +112,7 @@ void ShowPst(uint8_t *buf, int num)
     for (int i=0; i<num; i++) {
         memcpy(&data, buf, sizeof(data));
         time_t2tm(&tmx, &data.time, 1);
-        printf("%04d %02d:%02d:%02d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec);
+        printf("%d %02d:%02d:%02d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec);
         printf("%.3f %.3f %.3f\n", data.pst[0], data.pst[1], data.pst[2]);
         buf += sizeof(data);
     }
@@ -125,9 +133,9 @@ void ShowHarm(uint8_t *buf, int num, int type, int ord)
     for (int i=0; i<num; i++) {
         memcpy(&data, buf, sizeof(data));
         time_t2tm(&tmx, &data.time.tv_sec, 1);
-        printf("%04d %02d:%02d:%02d.%03d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec, data.time.tv_usec/1000);
+        printf("%03d %02d:%02d:%02d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec);
         if (type==1) {  // harmonic
-            printf("%.3f %.3f %.3f; %.3f %.3f %.3f; %.3f %.3f %.3f; %.3f %.3f %.3f\n", 
+            printf("%.3f %.3f %.3f; %.2f %.2f %.2f; %.3f %.3f %.3f; %.3f %.3f %.3f\n", 
                     data.hru[0][ord], data.hru[1][ord], data.hru[2][ord],
                     data.ha[0][ord], data.ha[1][ord], data.ha[2][ord],
                     data.ihru[0][ord], data.ihru[1][ord], data.ihru[2][ord],
@@ -158,7 +166,10 @@ bool ShowXxxRec(uint8_t *buf, int num, int type, int ord)
         if (bhead.type==t) break;
         buf += sizeof(bhead) + bhead.len;
     }
-    if (i>=num) return false;
+    if (i>=num) {
+        printf("No %s data\n", kNEDisTypeName[type]);
+        return false;
+    }
 
     printf("%s: %d. ", kNEDisTypeName[bhead.type], bhead.num);
     buf += sizeof(bhead);
@@ -219,7 +230,7 @@ bool ReadRecord(char *filename, int type, int ord)
     if (f_strm) {   //File be opened successfully
         i = fread(&fhead, sizeof(fhead), 1, f_strm);
         if (i != 1) return false;
-        printf("Number of data block = %d, compress = %d\n", fhead.num, fhead.compress);
+        printf("Number of data block = %d, compress = %d, power = %d kW\n", fhead.num, fhead.compress, fhead.rated_pwr);
         printf("=============================================\n");
         uLongf li = fhead.len[0];
         uint8_t *pbuf = new uint8_t[li];
@@ -289,7 +300,7 @@ int main (int argc, char *argv[])
             }
         }
     }
-
+    SetTimeZone(8);
     if (!ReadRecord(filename, type, ord)) printf("ShowRec() is failure\n");
 }
 

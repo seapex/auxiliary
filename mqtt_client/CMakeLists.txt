@@ -1,10 +1,10 @@
 cmake_minimum_required (VERSION 2.8)
 project (MQTTClientI)
-#add_definitions( ${PRE_DEF} -D${PROJECT_NAME})
+add_definitions( ${PRE_DEF} -D${PROJECT_NAME})
 
 # The version number.
-set (_VERSION_MAJOR 0)
-set (_VERSION_MINOR 1)
+set (_VERSION_MAJOR 1)
+set (_VERSION_MINOR 0)
 set (_VERSION_PATCH 0)
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
