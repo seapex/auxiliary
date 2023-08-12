@@ -158,7 +158,7 @@ void TestSpeed(int val, int phs, int type)
     delete [] data;
 }
 
-void TestAccuracy(int val, int phs, int type)
+void TestAccuracy(int cnt, int phs, int type)
 {
     int nums = smpl_rate_ / 5;  //Number of sampling points processed per round.
     int rounds = 60 * 5;    //Number of rounds per minute
@@ -168,10 +168,10 @@ void TestAccuracy(int val, int phs, int type)
     float *data = new float[nums];
     float *buf = new float[nums];
     StopWatch (0, 1, "accuracy:");
-    for (int i=0; i<val; i++) {
+    for (int i=0; i<cnt; i++) {
         if (i%10==0) pst_x_[0][phs] = 0;
         for (int j=0; j<rounds; j++) {
-            PstWaveGen(wave, nums, 0, phs, 100000, 100000/sqrt(2));
+            PstWaveGen(wave, nums, 0, phs, 10000, 10000/sqrt(2));
             for (int k=0; k<nums; k++) {
                 data[k] = wave[k];
                 data[k] /= 100;
@@ -194,14 +194,17 @@ int main (int argc, char *argv[])
     int cmd = parse_opt.Parse(argc, argv);
     if (cmd<kSpeedTst) return 0;
         
-    Initialize(PstSR400Hz, 100);
+    Initialize(PstSR1600Hz, 100);
     if (cmd==kSpeedTst) {
         for (int i=0; i<7; i++) {
             TestSpeed(12, 0, i);   //4channel * 3phase = 12
         }
     } else if (cmd==kAccuracyTst) {
+        int cnt;
         for (int i=0; i<7; i++) {
-            TestAccuracy(parse_opt.a_num(), 0, i);
+            cnt = parse_opt.a_num();
+            if (i==0) cnt += 10;
+            TestAccuracy(cnt, 0, i);
         }
     } else if (cmd==kStatisTst) {
         TestStatis(12);

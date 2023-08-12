@@ -7,7 +7,7 @@ endif()
 # The version number.
 set (_VERSION_MAJOR 1)
 set (_VERSION_MINOR 0)
-set (_VERSION_PATCH 1)
+set (_VERSION_PATCH 2)
 
 macro (add_sources)
     file (RELATIVE_PATH _relPath "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_LIST_DIR}")
@@ -38,15 +38,36 @@ include_directories ("${PROJECT_BINARY_DIR}")
 # add the src/ to the search path for src files
 add_subdirectory (src bin)
 
-# Copy external dependency files.
+# Update external dependency files.
 find_path(EMCTRL_PATH ".gitignore" "../../emctrl")
-message("EMCTRL_PATH: ${EMCTRL_PATH}")
-message("PROJECT_SOURCE_DIR: ${PROJECT_SOURCE_DIR}")
-configure_file (${EMCTRL_PATH}/common/data/ne_msg_dif.h ${PROJECT_SOURCE_DIR}/src COPYONLY)
-configure_file (${EMCTRL_PATH}/common/config/param_phd.h ${PROJECT_SOURCE_DIR}/src/misc COPYONLY)
-configure_file (${EMCTRL_PATH}/common/time/time_cst.cpp ${PROJECT_SOURCE_DIR}/src/misc COPYONLY)
-configure_file (${EMCTRL_PATH}/common/time/time_cst.h ${PROJECT_SOURCE_DIR}/src/misc COPYONLY)
-#file(COPY ${EMCTRL_PATH}/common/data/ne_msg_dif.h DESTINATION ${PROJECT_SOURCE_DIR}/src/misc)
+set(DEPSRC_PATH "${EMCTRL_PATH}/common")
+set(DEPDES_PATH "${PROJECT_SOURCE_DIR}/src")
+
+add_custom_command(
+   OUTPUT ${DEPDES_PATH}/ne_msg_dif.h
+   COMMAND ${CMAKE_COMMAND} -E copy ${DEPSRC_PATH}/data/ne_msg_dif.h ${DEPDES_PATH}/
+   COMMENT "Updating ne_msg_dif.h"
+   DEPENDS ${DEPSRC_PATH}/data/ne_msg_dif.h
+)
+add_custom_command(
+   OUTPUT ${DEPDES_PATH}/misc/param_phd.h
+   COMMAND ${CMAKE_COMMAND} -E copy ${DEPSRC_PATH}/config/param_phd.h ${DEPDES_PATH}/misc/
+   COMMENT "Updating param_phd.h"
+   DEPENDS ${DEPSRC_PATH}/config/param_phd.h
+)
+add_custom_command(
+   OUTPUT "${DEPDES_PATH}/misc/time_cst.cpp" "${DEPDES_PATH}/misc/time_cst.h"
+   COMMAND ${CMAKE_COMMAND} -E copy ${DEPSRC_PATH}/time/time_cst.cpp ${DEPDES_PATH}/misc/
+   COMMAND ${CMAKE_COMMAND} -E copy ${DEPSRC_PATH}/time/time_cst.h ${DEPDES_PATH}/misc/
+   COMMENT "Updating time_cst.*"
+   DEPENDS ${DEPSRC_PATH}/time/time_cst.cpp ${DEPSRC_PATH}/time/time_cst.h
+)
+
+add_custom_target(
+   update_depfile ALL
+   DEPENDS "${DEPDES_PATH}/ne_msg_dif.h" "${DEPDES_PATH}/misc/param_phd.h" 
+           "${DEPDES_PATH}/misc/time_cst.cpp" "${DEPDES_PATH}/misc/time_cst.h"
+)
 
 # build a CPack driven installer package
 include (InstallRequiredSystemLibraries)

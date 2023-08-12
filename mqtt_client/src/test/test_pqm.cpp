@@ -15,11 +15,12 @@ generate clear new energy record mqtt payload.
 int ClearNERec(char *topic, uint8_t *tbuf)
 {
     sprintf(topic+strlen(topic), "ctrl");
-    uint16_t buf[2];
-    buf[0] = 7;
-    buf[1] = 0xff;    //0=LD1,1=LD2..., 0xff=all LD
-    memcpy(tbuf, buf, 4);
-    return 4;
+
+    uint16_t ver = htons(1);
+    memcpy(tbuf, &ver, 2);
+    tbuf[3] = 7;
+    tbuf[5] = 0xff;    //0=LD1,1=LD2..., 0xff=all LD
+    return 6;
 }
 
 /*!
@@ -32,15 +33,16 @@ Get new energy record status.
 */
 int GetNERecStatus(char *topic, uint8_t *tbuf)
 {
-    NETestStatus ne_status;
-    memset(&ne_status, 0, sizeof(ne_status));
+    uint16_t chg = 0;
     sprintf(topic+strlen(topic), "ne/status");
 
+    uint16_t ver = htons(0);
+    memcpy(tbuf, &ver, 2);    
     for (int i=0; i<4; i++) {
-        *(uint16_t *)tbuf = ne_status.cnt;
         tbuf += 2;
+        *(uint16_t *)tbuf = htons(chg);
     }
-    return 8;
+    return 10;
 }
 
 /*!
@@ -55,20 +57,32 @@ int GetNERec(char *topic, uint8_t *tbuf)
 {
     sprintf(topic+strlen(topic), "ne/rec");
 
-    NERecTime rec_tm[] = {
-        {2023, 6, 13, 15, 3, 15},
-        {2023, 6, 13, 15, 33, 24},
-        {2023, 6, 13, 16, 3, 33}
+    NERecTime rec_tm[][3] = {
+        { {2023, 6, 13, 15, 3, 15}, {2023, 6, 13, 15, 33, 24}, {2023, 6, 13, 16, 3, 33} },
+        { {2023, 6, 14, 11, 3, 15}, {2023, 6, 14, 11, 33, 24}, {2023, 6, 14, 12, 3, 33} }
     };
 
-    tbuf[0] = 1;    //0=LD1,1=LD2..., 0xff=all LD
-    tbuf[1] = 2;    //0=bgdata, 1=0~10%, 2=10~20%, ..., 10=90~100%, 0xff=all range
-    tbuf[2] = 0;    //number of record, ≤8. 0=all record
-    for (int i=0; i<tbuf[2]; i++) {
-        memcpy(&tbuf[6+i*8], &rec_tm[i], 8);
+    uint16_t ver = htons(1);
+    memcpy(tbuf, &ver, 2);
+    int i = 2;
+    tbuf[i++] = 1;  //0=LD1,1=LD2..., 0xff=all LD
+    tbuf[i++] = 2;  //number of range, 0=all range
+    tbuf[i++] = 0;  //0=bgdata, 1=0~10%, 2=10~20%, ..., 10=90~100%
+    tbuf[i++] = 3;  //number of record(<16).  0=all record
+    i += 2;
+    for (int j=0; j<3; j++) {
+        memcpy(&tbuf[i], &rec_tm[0][j], 8);
+        i += 8;
+    }
+    tbuf[i++] = 2;  //0=bgdata, 1=0~10%, 2=10~20%, ..., 10=90~100%
+    tbuf[i++] = 3;  //number of record(<16).  0=all record
+    i+=2;
+    for (int j=0; j<3; j++) {
+        memcpy(&tbuf[i], &rec_tm[1][j], 8);
+        i += 8;
     }
 
-    return 6+8*tbuf[2];
+    return i;
 }
 
 /*!
@@ -82,9 +96,8 @@ void TestPQM(int func, MQTTClient *mqttc)
     mqttc_para().SetSubTopic("pq/up/#", 5, 0);
     mqttc->Subscribe();
  
-    char topic[32];
-    uint8_t tbuf[72];
-    memset(tbuf, 0, 2);
+    char topic[64];
+    uint8_t tbuf[256];
     int len = 0;
     sprintf(topic, "pq/dn/%s/", mqttc_para().dev_id());
     switch (func) {
@@ -95,10 +108,10 @@ void TestPQM(int func, MQTTClient *mqttc)
             len = GetNERecStatus(topic, &tbuf[2]);
             break;
         case 3: //get new energy record
-            len = GetNERec(topic, &tbuf[2]);
+            len = GetNERec(topic, tbuf);
             break;
         default:
             break;
     }
-    if (len > 0) mqttc->Publish(2, topic, tbuf, len+2);
+    if (len > 0) mqttc->Publish(2, topic, tbuf, len);
 }

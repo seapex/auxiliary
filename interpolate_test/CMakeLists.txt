@@ -9,7 +9,6 @@ set (_VERSION_PATCH 1)
 
 macro (add_sources)
     file (RELATIVE_PATH _relPath "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_LIST_DIR}")
-    message("ARGN=${ARGN}")
     foreach (_src ${ARGN})
         if (_relPath)
             list (APPEND SRC_LIST "${_relPath}/${_src}")
@@ -17,9 +16,6 @@ macro (add_sources)
             list (APPEND SRC_LIST "${_src}")
         endif()
     endforeach()
-    if (_relPath) # propagate SRC_LIST to parent directory
-        set (SRC_LIST ${SRC_LIST} PARENT_SCOPE)
-    endif()
 endmacro()
 
 # configure a header file to pass some of the CMake settings

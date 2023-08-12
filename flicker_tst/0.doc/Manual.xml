@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Programer manual of flicker test -->
-<manual>
-	<command_option>
-		pars_optn_flicker.cpp
-	</command_option>
-</manual>
-
-

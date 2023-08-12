@@ -53,9 +53,11 @@ struct NETestDataFreq {  //frequency data
 
 struct NETestDataHarm {  //harmonic data
     timeval time;
-    float hru[3][kMaxHarmNum+1];    //voltage harmonic ratio. unit:%. [0-2]:A-C. [0-50]:0-1 amplitude uint:V, 2-50 order.
+    float hu[3][kMaxHarmNum+1];     //voltage harmonic. unit:V. [0-2]:A-C. [0-50]:0-50 order.
+    float hu_ang[3][kMaxHarmNum+1]; //voltage harmonic phase angle. unit:degree. [0-2]:A-C. [1-50]:1-50 order.
+    float ihu[3][kMaxHarmNum+1];    //voltage interharmonic. unit:V. [0-2]:A-C. [0-50]:0-50 order.
     float ha[3][kMaxHarmNum+1];     //current harmonic. unit:A. [0-2]:A-C. [0-50]:0-50 order.
-    float ihru[3][kMaxHarmNum+1];   //voltage interharmonic ratio. unit:%. [0-2]:A-C. [0-50]:0-50 order.
+    float ha_ang[3][kMaxHarmNum+1]; //current harmonic phase angle. unit:degree. [0-2]:A-C. [1-50]:1-50 order.
     float iha[3][kMaxHarmNum+1];    //current interharmonic. unit:A. [0-2]:A-C. [0-50]:0-50 order.
     float thd[3][2];                //total harmonic distortion. unit:%. [0-2]:A-C. [0-1]:voltage,current
 };

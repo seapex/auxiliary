@@ -8,7 +8,7 @@
 #include "socket_client.h"
 #include "time_cst.h"
 #include "config.h"
-#include "data_bufs.h"
+#include "guic_bufs.h"
 #include "phy_prtcl.h"
 #include "app_prtcl.h"
 //#include "data_buf.h"
@@ -22,7 +22,7 @@ void SystemCtrl(int type)
 {
     const int CNNCT_MAX = 2;
     messageq_guic().InitQueue(CNNCT_MAX);
-    data_bufs().Initialize(CNNCT_MAX);
+    guic_bufs().Initialize(CNNCT_MAX);
     SocketClient *sock = new SocketClient(CNNCT_MAX);
     
     int ass_idx = sock->RegistIdx();
@@ -30,12 +30,12 @@ void SystemCtrl(int type)
         printf("Register communication object index(%d) failure!\n", ass_idx);
         return;
     }
-    data_bufs().new_buf(ass_idx);
-    if (sock->Start("/tmp/sockgui", NULL, kPhyPrtclPqB, kAppPrtclGuiC, ass_idx) < 0) {
+    guic_bufs().new_buf(ass_idx);
+    if (sock->Start("/tmp/sockgui", NULL, kPhyPrtclPqbC, kAppPrtclGuiC, ass_idx+1) < 0) {
         printf("socket start /tmp/sockgui failed!\n");
         return;
     }
-    DataBuf *data_buf = data_bufs().buf(ass_idx);
+    GuicBuf *data_buf = guic_bufs().buf(ass_idx);
     data_buf->set_sysctl_rsp(251, kCtrlSystemCtl);
     messageq_guic().PushCtrlSig(ass_idx, kCtrlSystemCtl, type);
     int i;

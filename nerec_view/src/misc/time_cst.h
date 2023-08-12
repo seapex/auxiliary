@@ -29,6 +29,7 @@ const char *Time2Str(time_t tim);
 
 float stopwatch_dur(int id);
 
+
 #ifdef __cplusplus
 }
 #endif

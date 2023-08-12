@@ -27,10 +27,15 @@ data_buf_ = data_bufs().buf(ass_idx_);
 ```bash
 HostName=192.168.1.3
 PortName=1883
+ClientID=PQSCADA50_001
 DeviceID=PQNet300D000003
 ConnectFlags=00  # hexadecimal number
+Protocol level=5
+KeepAlive(s)=120
 SubTopics=seapex/test1/#,05;seapex/test2/#,05;,;,;,;    # topic,option(hex); 
+Disable=0
 ```
+
 ## usage
 ```bash
 MAIN_PROG [option]

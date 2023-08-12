@@ -9,9 +9,11 @@
 #include "ne_msg_dif.h"
 #include "time_cst.h"
 
-static const char *kNETypeName[] = {"freq", "harm", "unblc", "udev", "pst", "thd"};
+enum kNEDataType {kNETypeFreq, kNETypeHarm, kNETypeUnblc, kNETypeUdev, 
+              kNETypePst, kNETypeThd, kNETypeIharm, kNETypeMax};
+static const char *kNETypeName[] = {"freq", "harm", "unblc", "udev", "pst", "thd", "iharm"};
 static const char *kNEDisTypeName[] = {"Frequency", "Harmonic", "Unbalance", 
-            "Voltage deviation", "Pst", "thd"};
+            "Voltage deviation", "Pst", "thd", "Interharmonic"};
 
 /*!
 Show help information
@@ -21,8 +23,8 @@ void ShowHelp()
 {
     printf(" Usage: %s filename\n", app_name_);
     printf("        %s filename type [param]\n", app_name_);
-    printf("\ttype -- %s, %s [orders], %s, %s, %s, %s\n", 
-            kNETypeName[0], kNETypeName[1], kNETypeName[2], kNETypeName[3], 
+    printf("\ttype -- %s, %s|%s [orders], %s, %s, %s, %s\n", 
+            kNETypeName[0], kNETypeName[1], kNETypeName[6], kNETypeName[2], kNETypeName[3], 
             kNETypeName[4], kNETypeName[5]);
     printf("\n");
     exit(0);
@@ -123,10 +125,10 @@ Show Pst data
 
     Input:  buf -- buffer of Pst data
             num -- number of Pst data
-            type -- data type. 1=harm, 5=thd
+            type -- data type. kNETypeHarm, kNETypeIharm, KNTypeThd
             ord -- harmonic orders. 0-50
 */
-void ShowHarm(uint8_t *buf, int num, int type, int ord)
+void ShowHarm(uint8_t *buf, int num, kNEDataType type, int ord)
 {
     NETestDataHarm data;
     struct tm tmx;
@@ -134,15 +136,23 @@ void ShowHarm(uint8_t *buf, int num, int type, int ord)
         memcpy(&data, buf, sizeof(data));
         time_t2tm(&tmx, &data.time.tv_sec, 1);
         printf("%03d %02d:%02d:%02d ", i+1, tmx.tm_hour, tmx.tm_min, tmx.tm_sec);
-        if (type==1) {  // harmonic
-            printf("%.3f %.3f %.3f; %.2f %.2f %.2f; %.3f %.3f %.3f; %.3f %.3f %.3f\n", 
-                    data.hru[0][ord], data.hru[1][ord], data.hru[2][ord],
-                    data.ha[0][ord], data.ha[1][ord], data.ha[2][ord],
-                    data.ihru[0][ord], data.ihru[1][ord], data.ihru[2][ord],
-                    data.iha[0][ord], data.iha[1][ord], data.iha[2][ord]);
-        } else {    // thd
-            printf("%.3f %.3f; %.3f %.3f; %.3f %.3f\n", data.thd[0][0], data.thd[0][1], data.thd[1][0],
+        switch (type) {
+            case kNETypeThd:
+                printf("%.3f %.3f; %.3f %.3f; %.3f %.3f\n", data.thd[0][0], data.thd[0][1], data.thd[1][0],
                     data.thd[1][1], data.thd[2][0], data.thd[2][1]);
+                break;
+            case kNETypeIharm:
+                printf("%.3f %.3f %.3f; %.3f %.3f %.3f\n", 
+                    data.ihu[0][ord], data.ihu[1][ord], data.ihu[2][ord],
+                    data.iha[0][ord], data.iha[1][ord], data.iha[2][ord]);
+                break;
+            default:
+                printf("%.3f %.3f %.3f; %.1f %.1f %.1f; %.3f %.3f %.3f; %.1f %.1f %.1f\n", 
+                    data.hu[0][ord], data.hu[1][ord], data.hu[2][ord],
+                    data.hu_ang[0][ord], data.hu_ang[1][ord], data.hu_ang[2][ord],
+                    data.ha[0][ord], data.ha[1][ord], data.ha[2][ord],
+                    data.ha_ang[0][ord], data.ha_ang[1][ord], data.ha_ang[2][ord]);
+                break;
         }
         buf += sizeof(data);
     }
@@ -153,13 +163,13 @@ Show a certain type of data
 
     Input:  buf -- data buffer
             num -- Number of data block
-            type -- data type. 0=freq, 1=harm, 2=unblc, 3=udev, 4=pst, 5=thd
+            type -- data type.
             ord -- harmonic orders. 0-50
 */
-bool ShowXxxRec(uint8_t *buf, int num, int type, int ord)
+bool ShowXxxRec(uint8_t *buf, int num, kNEDataType type, int ord)
 {
     NETestBlockHead bhead;
-    int t = type==5?1:type;
+    int t = (type==kNETypeThd||type==kNETypeIharm)?1:type;
     int i;
     for (i=0; i<num; i++) {
         memcpy(&bhead, buf, sizeof(bhead));
@@ -219,10 +229,10 @@ void ShowRecBrief(uint8_t *buf, int num)
 Read record from file
 
     Input:  filename
-            type -- data type. 0=freq, 1=thd, 2=harm, 3=unblc, 4=udev, 5=pst
+            type -- data type. refer to kNEDataType
             ord -- harmonic orders. 0-50
 */
-bool ReadRecord(char *filename, int type, int ord)
+bool ReadRecord(char *filename, kNEDataType type, int ord)
 {
     NETestFileHead fhead;
     int i, j, k=0, idx;
@@ -280,15 +290,15 @@ int main (int argc, char *argv[])
     int type=999, ord=999;
     if (argv[2]) {
         int i;
-        for (i=0; i<6; i++) {
+        for (i=0; i<kNETypeMax; i++) {
             if (!strcmp(argv[2], kNETypeName[i])) break;
         }
-        if (i>=6) {
+        if (i>=kNETypeMax) {
             printf("Unknown data type\n");
             exit(1);
         }
         type = i;
-        if (type==kNEDataHarm) {
+        if (type==kNETypeHarm||type==kNETypeIharm) {
             if (argv[3]) {
                 sscanf(argv[3], "%d", &ord);
             } else {
@@ -301,7 +311,7 @@ int main (int argc, char *argv[])
         }
     }
     SetTimeZone(8);
-    if (!ReadRecord(filename, type, ord)) printf("ShowRec() is failure\n");
+    if (!ReadRecord(filename, (kNEDataType)type, ord)) printf("ShowRec() is failure\n");
 }
 
 
