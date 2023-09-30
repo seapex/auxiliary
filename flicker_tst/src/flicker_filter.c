@@ -3,12 +3,14 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
+
 #include "flicker_filter.h"
 
 #define kChannelTol 4   //Total number of channel
 
 /*!
-0.05~35HZ Bandpass filter parameter
+0.05~35HZ Band pass filter parameter
 */
 typedef struct {
     double a[7];   //lowpass coefficient a
@@ -22,18 +24,12 @@ typedef struct {
     float xh[2];   //highpass variable x
     float yh[2];   //highpass variable y
 } BandTmpVar;    //bandpass filter temp variable
-
-/*!
-Visual sensitivity filter parameter
-*/
 typedef struct {
-    double a[5];   //coefficient a
-    double b[5];   //coefficient b
-} SensConst;    //Visual sensitivity filter constant coefficient
-typedef struct {
-    double x[5];   //variable x
-    double y[5];   //variable y
-} SensTmpVar;    //Visual sensitivity filter temp variable
+    BandConst con;
+    BandTmpVar var[kChannelTol][3];
+} BandPasFltrPara;
+#pragma DATA_SECTION(band_fltr_, ".data");
+static BandPasFltrPara band_fltr_;
 
 /*!
 RC lowpass filter parameter
@@ -47,113 +43,216 @@ typedef struct {
     float x[2];   //variable x
     float y[2];   //variable y
 } RCLowTmpVar;    //RC lowpass filter temp variable
+typedef struct {
+    RCLowConst con;
+    RCLowTmpVar var[kChannelTol][3];
+} RCLpasFltrPara;
+#pragma DATA_SECTION(rc_fltr1_, ".data");
+static RCLpasFltrPara rc_fltr1_;   //27.3s for block1
+#pragma DATA_SECTION(rc_fltr4_, ".data");
+static RCLpasFltrPara rc_fltr4_;   //0.3s for block4
+
 /*!
-DC filter parameter
+Weighting filter parameter
 */
 typedef struct {
-    int cnt;    //Count of SV in 1s
-    float bf;  //dc voltage before square in 1s
-	float bfs[20]; //For calculate dc voltage before square
-	float bfavg;   //The average of bfs[20]
-    float aft;  //dc voltage after square in 1s
-	float afts[180];    //For calculate dc voltage after square. must >=2min, it's very important.
-	float aftavg;   //The average of afts[20]
-	int pbf, paft;  //current point to bfs, afts
-} DCFltrTmpVar;     //DC filter temp variable
+    double a[5];    //coefficient a
+    double b[5];    //coefficient b
+} WeightConst;      //Visual sensitivity filter constant coefficient
+typedef struct {
+    double x[5];    //variable x
+    double y[5];    //variable y
+} WeightTmpVar;     //Visual sensitivity filter temp variable
+typedef struct {
+    WeightConst con;
+    WeightTmpVar var[kChannelTol][3];
+} WghtFltrPara;
+#pragma DATA_SECTION(wght_fltr_, ".data");
+static WghtFltrPara wght_fltr_;
 
-#pragma DATA_SECTION(band_c_, ".data");
-static BandConst band_c_;
-#pragma DATA_SECTION(band_v_, ".data");
-static BandTmpVar band_v_[kChannelTol][3];
-
-#pragma DATA_SECTION(sens_c_, ".data");
-static SensConst sens_c_;
-#pragma DATA_SECTION(sens_v_, ".data");
-static SensTmpVar sens_v_[kChannelTol][3];
-
-#pragma DATA_SECTION(rclo_c_, ".data");
-static RCLowConst rclo_c_;
-#pragma DATA_SECTION(rclo_v_, ".data");
-static RCLowTmpVar rclo_v_[kChannelTol][3];
-
-#pragma DATA_SECTION(dcf_v_, ".data");
-static DCFltrTmpVar dcf_v_[kChannelTol][3];
+typedef struct {
+    int32_t buf[512];  //
+    uint64_t sum;
+    int16_t pnt[2]; //pointer to FIFO32.buf, [0-1]:head,tail、
+    int16_t cnt;    //rms calculation interval count.
+    int16_t zo_f_;  //Scaling factor to prevent numerical overflow
+} FIFO32;
+FIFO32 fifo_rms_[kChannelTol][3];   //FIFO for 5cycle rms calculation.
+FIFO32 *prms_;
 
 #pragma DATA_SECTION(avg_num_, ".data");
-static int16_t avg_num_;    //The number of instantaneous flicker values used to calculate an average
+static uint8_t avg_num_;    //The number of instantaneous flicker values used to calculate an average
+static uint8_t block2_ = 0;     //Algorithm of block 2. 0=x^2, 1=x.
 static int16_t smpl_rate_;   //sampling rate. unit:Hz
-int avg_num_flicker() { return avg_num_; }
+static int16_t rms_invr_;   //rms calculation interval.
+
+uint8_t avg_num_flicker() { return avg_num_; }
+void set_block2(uint8_t val) { block2_ = val&1; }
+int16_t prms_zo_f(int cdx, int phs) { return fifo_rms_[cdx][phs].zo_f_; }
+
+/*!
+Initialize flicker filter calculation parameters
+
+    Input:  rate -- sampling rate type. refer to kPstSampleRate.
+*/
+void IniFilterPar(int rate)
+{
+    int i, j;
+    float fi;
+
+    switch (rate) {
+        case PstSR800Hz:
+			band_fltr_.con.a[0] = band_fltr_.con.a[6] = 0.000003968763;
+			band_fltr_.con.a[1] = band_fltr_.con.a[5] = 0.00002381258;
+			band_fltr_.con.a[2] = band_fltr_.con.a[4] = 0.00005953145;
+			band_fltr_.con.a[3] = 0.00007937526;
+			band_fltr_.con.b[1] = -4.945139;   band_fltr_.con.b[2] = 10.26772;
+			band_fltr_.con.b[3] = -11.44799;   band_fltr_.con.b[4] = 7.223983;
+			band_fltr_.con.b[5] = -2.444865;   band_fltr_.con.b[6] = 0.3465408;
+			band_fltr_.con.ah = 0.9998;        band_fltr_.con.bh = -0.99961;
+    		wght_fltr_.con.a[0] = 0.00259963;  wght_fltr_.con.a[1] = 0.0000461345;
+	    	wght_fltr_.con.a[2] = -0.00515313;  wght_fltr_.con.a[3] = -0.0000461345;
+		    wght_fltr_.con.a[4] = 0.0025535;
+    		wght_fltr_.con.b[1] = -3.765314;   wght_fltr_.con.b[2] = 5.313669;
+	    	wght_fltr_.con.b[3] = -3.330456;   wght_fltr_.con.b[4] = 0.7821078;
+		    rc_fltr4_.con.a = 0.002079;   rc_fltr4_.con.b = -0.99584;  rc_fltr4_.con.K = 121;
+		    avg_num_ = 20;
+		    smpl_rate_ = 800;
+            break;
+        case PstSR1600Hz:
+			band_fltr_.con.a[0] = band_fltr_.con.a[6] = 8.07852914e-8;
+			band_fltr_.con.a[1] = band_fltr_.con.a[5] = 4.84711748e-7;
+			band_fltr_.con.a[2] = band_fltr_.con.a[4] = 1.21177937e-6;
+			band_fltr_.con.a[3] = 1.61570583e-6;
+			band_fltr_.con.b[1] = -5.46984852; band_fltr_.con.b[2] = 12.4879330;
+			band_fltr_.con.b[3] = -15.2305828; band_fltr_.con.b[4] = 10.4650611;
+			band_fltr_.con.b[5] = -3.84070239; band_fltr_.con.b[6] = 0.588144766;
+			band_fltr_.con.ah = 0.9999;        band_fltr_.con.bh = -0.9998;
+    		wght_fltr_.con.a[0] = 0.00068655489;   wght_fltr_.con.a[1] = 6.1191384e-6;
+	    	wght_fltr_.con.a[2] = -0.0013669906;   wght_fltr_.con.a[3] = -6.1191384e-6;
+		    wght_fltr_.con.a[4] = 0.00068043575;
+    		wght_fltr_.con.b[1] = -3.880097;       wght_fltr_.con.b[2] = 5.6448073;
+	    	wght_fltr_.con.b[3] = -3.6491997;      wght_fltr_.con.b[4] = 0.8844899;
+		    rc_fltr4_.con.a = 0.0010406;  rc_fltr4_.con.b = -0.99792;  rc_fltr4_.con.K = 123;
+		    avg_num_ = 40;
+		    smpl_rate_ = 1600;
+            break;
+        case PstSR2560Hz:
+			band_fltr_.con.a[0] = band_fltr_.con.a[6] = 5.318723435e-9;
+			band_fltr_.con.a[1] = band_fltr_.con.a[5] = 3.191234061e-8;
+			band_fltr_.con.a[2] = band_fltr_.con.a[4] = 7.978085152e-8;
+			band_fltr_.con.a[3] = 1.063744687e-7;
+			band_fltr_.con.b[1] = -5.668303216; band_fltr_.con.b[2] = 13.39607301;
+			band_fltr_.con.b[3] = -16.89562353; band_fltr_.con.b[4] = 11.99384858;
+			band_fltr_.con.b[5] = -4.543586172; band_fltr_.con.b[6] = 0.7175916763;
+			band_fltr_.con.ah = 0.99994;       band_fltr_.con.bh = -0.99988;
+    		wght_fltr_.con.a[0] = 0.0002738507269;  wght_fltr_.con.a[1] = 1.528042052e-6;
+	    	wght_fltr_.con.a[2] = -0.0005461734118; wght_fltr_.con.a[3] = -1.528042052e-6;
+		    wght_fltr_.con.a[4] = 0.0002723226849;
+    		wght_fltr_.con.b[1] = -3.924423823;      wght_fltr_.con.b[2] = 5.775048124;
+	    	wght_fltr_.con.b[3] = -3.776793934;      wght_fltr_.con.b[4] = 0.9261697117;
+		    rc_fltr4_.con.a = 0.00065062; rc_fltr4_.con.b = -0.9987;   rc_fltr4_.con.K = 124;
+		    avg_num_ = 80;
+		    smpl_rate_ = 2560;
+            break;
+        default:    // 400Hz
+			band_fltr_.con.a[0] = band_fltr_.con.a[6] = 0.000151;
+			band_fltr_.con.a[1] = band_fltr_.con.a[5] = 0.000904;
+			band_fltr_.con.a[2] = band_fltr_.con.a[4] = 0.00226;
+			band_fltr_.con.a[3] = 0.00301;
+			band_fltr_.con.b[1] = -3.9315;     band_fltr_.con.b[2] = 6.6912;
+			band_fltr_.con.b[3] = -6.2495;     band_fltr_.con.b[4] = 3.3605;
+			band_fltr_.con.b[5] = -0.9828;     band_fltr_.con.b[6] = 0.1218;
+			band_fltr_.con.ah = 0.99961;       band_fltr_.con.bh = -0.99921;
+    		wght_fltr_.con.a[0] = 0.00931245;  wght_fltr_.con.a[1] = 0.00032762;
+	    	wght_fltr_.con.a[2] = -0.01829728; wght_fltr_.con.a[3] = -0.00032762;
+		    wght_fltr_.con.a[4] = 0.00898483;
+    		wght_fltr_.con.b[1] = -3.548754;   wght_fltr_.con.b[2] = 4.714548;
+	    	wght_fltr_.con.b[3] = -2.776010;   wght_fltr_.con.b[4] = 0.610325;
+		    rc_fltr4_.con.a = 0.00415;    rc_fltr4_.con.b = -0.99170;  rc_fltr4_.con.K = 124;
+		    avg_num_ = 20;
+		    smpl_rate_ = 400;
+            break;
+    }
+    rms_invr_ = smpl_rate_/100; //The rms is calculated every half period
+    rc_fltr1_.con.a = 1.8312E-04;  rc_fltr1_.con.b = -0.9996338;  rc_fltr1_.con.K = 1;  //27.3s at 100Hz
+    
+    memset(rc_fltr1_.var, 0, sizeof(rc_fltr1_.var));
+    memset(band_fltr_.var, 0, sizeof(band_fltr_.var));
+    memset(wght_fltr_.var, 0, sizeof(wght_fltr_.var));
+    memset(rc_fltr4_.var, 0, sizeof(rc_fltr4_.var));
+
+    memset(fifo_rms_, 0, sizeof(fifo_rms_));
+}
 
 /*!
 Preprocessing before filter
 
     Input:  src --
-            cnt -- Number of SV of src
-            dc -- DC filter parameter
+            cnt -- Number of SV in src
+            tvr -- temp variable for RC low filter
+            smp_n -- sampling number per n cycle
     Output: des --
 */
-void PreFilter(float *des, const float *src, int cnt, DCFltrTmpVar *dc)
+void PreFilter(float *des, const int32_t *src, int cnt, RCLowTmpVar *tvr, int smp_n)
 {
-    float d1;
-    int i, n, pos;
-
-    n = 0;
-    if ((dc->cnt+cnt)>=smpl_rate_) {
-        n = smpl_rate_ - dc->cnt;
-
-        //计算平方前的平均直流分量
-        for(i = 0; i < n; i++) {
-            dc->bf += src[i];
+    float rms= tvr->y[1];
+    int i, v, sz, pos, nz=0, cnt4zof=0;
+    if (rms>0) nz=block2_+1;    //not zero. 0=zero, 1=x^2, 2=x.
+    
+    int16_t head, tail;
+    head = prms_->pnt[0];
+    tail = prms_->pnt[1];
+    for (i=0; i<cnt; i++) {
+        v = src[i]>>prms_->zo_f_;
+        if (abs(v)>28000) {
+            cnt4zof++;
         }
-        pos = dc->pbf;
-        dc->bfs[pos] = dc->bf/smpl_rate_;
-        pos++;
-        dc->pbf = pos>=20?0:pos;
-        d1 = 0;
-        for (i = 0; i < 20; i++) {  // 直流分量平均值
-            d1 +=  dc->bfs[i];
+        v *= v;
+        prms_->sum += v;
+        prms_->buf[head++] = v;
+        head &= 0x1ff;
+        if (++(prms_->cnt) >= rms_invr_) {
+            prms_->cnt = 0;
+            sz = head;
+            if (head<tail) sz += 512;
+            sz -= tail;
+            while (sz>smp_n) {
+                prms_->sum -= prms_->buf[tail++];
+                tail &= 0x1ff;
+                sz--;
+            }
+            rms = sqrt(prms_->sum/sz);
+            //printf("prms_->sum=%lld,sz=%d;  ", prms_->sum, sz);
+            tvr->x[0] = tvr->x[1];
+            tvr->x[1] = rms;
+            tvr->y[0] = tvr->y[1];
+            tvr->y[1] = rc_fltr1_.con.K*rc_fltr1_.con.a*(tvr->x[1]+tvr->x[0]) - rc_fltr1_.con.b*tvr->y[0];
+            rms = tvr->y[1];
+            if (rms>0) nz=block2_+1;
+            else nz=0;
         }
-        dc->bfavg = d1/i;
-        dc->bf = 0;
-        //计算平方后的平均直流分量
-        for(i = 0; i < n; i++) {
-            des[i] = src[i] - dc->bfavg;  // 当前波动数据减去一个直流分量
-            des[i] *= des[i];
-            dc->aft += des[i];
+        des[i] = src[i];
+        des[i] = des[i]/rms/(1<<prms_->zo_f_);
+        switch (nz) {
+            case 1:     //x^2. for AC & DC
+                des[i] *= des[i];
+                des[i] *= 50;   //(1/sqrt(2))^2=1/2=50%
+                break;
+            case 2:     //x. only for DC
+                des[i] *= 100;   //100%
+                break;
+            default:
+                des[i] = 0; //此句必须放此处，否则会导致开始的几个des未被赋值.
+                break;
         }
-        pos = dc->paft;
-        dc->afts[pos] = dc->aft/smpl_rate_;   // 平方和的平均值 in 1s
-        pos++;
-        dc->paft = pos>=180? 0:pos;
-        d1 = 0;
-        for (i = 0; i < 180; i++) { // 平方后直流分量的平均值
-            d1 +=  dc->afts[i];
-        }
-        dc->aftavg = d1/i;
-        dc->aft = 0;
-        
-        dc->cnt = 0;
     }
-    for(i = n; i < cnt; i++) {
-        dc->bf += src[i];
+    if (cnt4zof>15) prms_->zo_f_++;
+    if (prms_->zo_f_) {
+        if (rms<5000) prms_->zo_f_--;
     }
-    for(i = n; i < cnt; i++) {
-        des[i] = src[i] - dc->bfavg;  // 当前波动数据减去一个直流分量
-        des[i] *= des[i];
-        dc->aft += des[i];
-    }
-    dc->cnt += (cnt-n);
-
-    //提取出调制波的相对波动, 消除载波幅值对最终结果的影响。
-    d1 = dc->aftavg;
-    //printf("dc->bfavg=%g, dc->aftavg=%g\n", dc->bfavg, dc->aftavg);
-    if (d1>0) {
-        for(i = 0; i < cnt; i++) {
-            des[i] = (des[i]-d1)*50/(d1+dc->bfavg*dc->bfavg);   //It's very important,Don't modify!!!
-        }
-    } else {
-        memset(des, 0, sizeof(float)*cnt);
-    }
+    prms_->pnt[0] = head;
+    prms_->pnt[1] = tail;
 }
 
 /*!
@@ -164,18 +263,18 @@ void PreFilter(float *des, const float *src, int cnt, DCFltrTmpVar *dc)
             tvr -- temp variable for bandpass filter
     Output: des --
 */
-void BandPsFilter(float *des, const float *src, int cnt, BandTmpVar *tvr)
+void BandPasFilter(float *des, const float *src, int cnt, BandTmpVar *tvr)
 {
     int i;
 
 #pragma MUST_ITERATE(8);
     for(i = 0; i < cnt; i++) {
         //一阶高通滤波(0.05Hz)
-        /*tvr->xh[0] = tvr->xh[1];
-        tvr->xh[1] = src[i];    //tvr->y[6];
+        tvr->xh[0] = tvr->xh[1];
+        tvr->xh[1] = src[i];
         tvr->yh[0] = tvr->yh[1];
-        tvr->yh[1] = band_c_.ah*(tvr->xh[1]-tvr->xh[0]) - band_c_.bh*tvr->yh[0];
-        */
+        tvr->yh[1] = band_fltr_.con.ah*(tvr->xh[1]-tvr->xh[0]) - band_fltr_.con.bh*tvr->yh[0];
+
         // 六阶巴特沃斯低通滤波(35Hz)
         tvr->x[0] = tvr->x[1];
         tvr->x[1] = tvr->x[2];
@@ -183,33 +282,64 @@ void BandPsFilter(float *des, const float *src, int cnt, BandTmpVar *tvr)
         tvr->x[3] = tvr->x[4];
         tvr->x[4] = tvr->x[5];
         tvr->x[5] = tvr->x[6];
-        tvr->x[6] = src[i]; //tvr->yh[1]; 
+        tvr->x[6] = tvr->yh[1]; 
         tvr->y[0] = tvr->y[1];
         tvr->y[1] = tvr->y[2];
         tvr->y[2] = tvr->y[3];
         tvr->y[3] = tvr->y[4];
         tvr->y[4] = tvr->y[5];
         tvr->y[5] = tvr->y[6];
-        tvr->y[6] = band_c_.a[0] * tvr->x[6]
-                    + band_c_.a[1] * tvr->x[5]
-                    + band_c_.a[2] * tvr->x[4]
-                    + band_c_.a[3] * tvr->x[3]
-                    + band_c_.a[4] * tvr->x[2]
-                    + band_c_.a[5] * tvr->x[1]
-                    + band_c_.a[6] * tvr->x[0]
-                    - band_c_.b[1] * tvr->y[5]
-                    - band_c_.b[2] * tvr->y[4]
-                    - band_c_.b[3] * tvr->y[3]
-                    - band_c_.b[4] * tvr->y[2]
-                    - band_c_.b[5] * tvr->y[1]
-                    - band_c_.b[6] * tvr->y[0];
+        tvr->y[6] = band_fltr_.con.a[0] * tvr->x[6]
+                    + band_fltr_.con.a[1] * tvr->x[5]
+                    + band_fltr_.con.a[2] * tvr->x[4]
+                    + band_fltr_.con.a[3] * tvr->x[3]
+                    + band_fltr_.con.a[4] * tvr->x[2]
+                    + band_fltr_.con.a[5] * tvr->x[1]
+                    + band_fltr_.con.a[6] * tvr->x[0]
+                    - band_fltr_.con.b[1] * tvr->y[5]
+                    - band_fltr_.con.b[2] * tvr->y[4]
+                    - band_fltr_.con.b[3] * tvr->y[3]
+                    - band_fltr_.con.b[4] * tvr->y[2]
+                    - band_fltr_.con.b[5] * tvr->y[1]
+                    - band_fltr_.con.b[6] * tvr->y[0];
+        des[i] = tvr->y[6];
+    }
+}
 
-        //一阶高通滤波(0.05Hz)
-        tvr->xh[0] = tvr->xh[1];
-        tvr->xh[1] = tvr->y[6];
-        tvr->yh[0] = tvr->yh[1];
-        tvr->yh[1] = band_c_.ah*(tvr->xh[1]-tvr->xh[0]) - band_c_.bh*tvr->yh[0];
-        des[i] = tvr->yh[1];
+/*!
+Weighting filter
+
+    Input:  src --
+            cnt -- Number of SV of src
+            tvr -- temp variable for sens filter
+    Output: des --
+*/
+void WeightFilter(float *des, const float *src, int cnt, WeightTmpVar *tvr)
+{
+    int i;
+
+#pragma MUST_ITERATE(8);
+    for(i = 0; i < cnt; i++) {
+        tvr->x[0] = tvr->x[1];
+        tvr->x[1] = tvr->x[2];
+        tvr->x[2] = tvr->x[3];
+        tvr->x[3] = tvr->x[4];
+        tvr->x[4] = src[i];
+        tvr->y[0] = tvr->y[1];
+        tvr->y[1] = tvr->y[2];
+        tvr->y[2] = tvr->y[3];
+        tvr->y[3] = tvr->y[4];
+        tvr->y[4] = wght_fltr_.con.a[0] * tvr->x[4]
+                    + wght_fltr_.con.a[1] * tvr->x[3]
+                    - wght_fltr_.con.b[1] * tvr->y[3]
+                    + wght_fltr_.con.a[2] * tvr->x[2]
+                    - wght_fltr_.con.b[2] * tvr->y[2]
+                    + wght_fltr_.con.a[3] * tvr->x[1]
+                    - wght_fltr_.con.b[3] * tvr->y[1]
+                    + wght_fltr_.con.a[4] * tvr->x[0]
+                    - wght_fltr_.con.b[4] * tvr->y[0];
+
+        des[i] = tvr->y[4];
     }
 }
 
@@ -229,46 +359,9 @@ void RCLowPsFilter(float *des, const float *src, int cnt, RCLowTmpVar *tvr)
         tvr->x[0] = tvr->x[1];
         tvr->x[1] = src[i] * src[i];
         tvr->y[0] = tvr->y[1];
-        tvr->y[1] = rclo_c_.K*rclo_c_.a*(tvr->x[1]+tvr->x[0]) - rclo_c_.b*tvr->y[0];
+        tvr->y[1] = rc_fltr4_.con.K*rc_fltr4_.con.a*(tvr->x[1]+tvr->x[0]) - rc_fltr4_.con.b*tvr->y[0];
 
         des[i] = tvr->y[1];
-    }
-}
-
-/*!
-Visual sensitivity filter
-
-    Input:  src --
-            cnt -- Number of SV of src
-            tvr -- temp variable for sens filter
-    Output: des --
-*/
-void SensFilter(float *des, const float *src, int cnt, SensTmpVar *tvr)
-{
-    int i;
-
-#pragma MUST_ITERATE(8);
-    for(i = 0; i < cnt; i++) {
-        tvr->x[0] = tvr->x[1];
-        tvr->x[1] = tvr->x[2];
-        tvr->x[2] = tvr->x[3];
-        tvr->x[3] = tvr->x[4];
-        tvr->x[4] = src[i];
-        tvr->y[0] = tvr->y[1];
-        tvr->y[1] = tvr->y[2];
-        tvr->y[2] = tvr->y[3];
-        tvr->y[3] = tvr->y[4];
-        tvr->y[4] = sens_c_.a[0] * tvr->x[4]
-                    + sens_c_.a[1] * tvr->x[3]
-                    - sens_c_.b[1] * tvr->y[3]
-                    + sens_c_.a[2] * tvr->x[2]
-                    - sens_c_.b[2] * tvr->y[2]
-                    + sens_c_.a[3] * tvr->x[1]
-                    - sens_c_.b[3] * tvr->y[1]
-                    + sens_c_.a[4] * tvr->x[0]
-                    - sens_c_.b[4] * tvr->y[0];
-
-        des[i] = tvr->y[4];
     }
 }
 
@@ -279,23 +372,26 @@ Flicker filter
             cnt -- Number of SV of src
             cdx -- channel index. 0-
             phs -- phase, 0~2=A~C
+            frq -- Power frequency, unit:Hz
     Output: des -- Average instantaneous flicker value
     Return: number of output data.
 */
-int FlickerFilter(float *des, const float *src, int cnt, int cdx, int phs)
+int FlickerFilter(float *des, const int32_t *src, int cnt, int cdx, int phs, float frq)
 {
+    if (frq==0) return 0;
     float fi;
-    int i, j;
-    
+    int i, j, k;
     float *pd = des;
-    const float *ps = src;
+    const int32_t *ps = src;
     i = cnt;
+    int freq = smpl_rate_*2/frq+0.5;
     while(i>0) {
         j = i<smpl_rate_?i:smpl_rate_;
-        PreFilter(pd, ps, j, &dcf_v_[cdx][phs]);
-        BandPsFilter(pd, pd, j, &band_v_[cdx][phs]);
-        SensFilter(pd, pd, j, &sens_v_[cdx][phs]);
-        RCLowPsFilter(pd, pd, j, &rclo_v_[cdx][phs]);
+        prms_ = &fifo_rms_[cdx][phs];
+        PreFilter(pd, ps, j, &rc_fltr1_.var[cdx][phs], smpl_rate_*2/frq+0.5);    //smpl_rate_*n/frq+0.5 -- Calculate the rms based on n cycles
+        BandPasFilter(pd, pd, j, &band_fltr_.var[cdx][phs]);
+        WeightFilter(pd, pd, j, &wght_fltr_.var[cdx][phs]);
+        RCLowPsFilter(pd, pd, j, &rc_fltr4_.var[cdx][phs]);
         i -= j;
         ps += j;
         pd += j;
@@ -311,108 +407,3 @@ int FlickerFilter(float *des, const float *src, int cnt, int cdx, int phs)
     return cnt/avg_num_;
 }
 
-/*!
-Initialize flicker filter calculation parameters
-
-    Input:  rate -- sampling rate type. refer to kPstSampleRate.
-            val -- Initial voltage peak value. e.g. if rms is 57.74V, then peak value is 57.74*1.414
-*/
-void IniFilterPar(int rate, float val)
-{
-    int i, j;
-    float fi;
-
-    switch (rate) {
-        case PstSR800Hz:
-			band_c_.a[0] = band_c_.a[6] = 0.000003968763;
-			band_c_.a[1] = band_c_.a[5] = 0.00002381258;
-			band_c_.a[2] = band_c_.a[4] = 0.00005953145;
-			band_c_.a[3] = 0.00007937526;
-			band_c_.b[1] = -4.945139;   band_c_.b[2] = 10.26772;
-			band_c_.b[3] = -11.44799;   band_c_.b[4] = 7.223983;
-			band_c_.b[5] = -2.444865;   band_c_.b[6] = 0.3465408;
-			band_c_.ah = 0.9998;        band_c_.bh = -0.99961;
-    		sens_c_.a[0] = 0.00259963;  sens_c_.a[1] = 0.0000461345;
-	    	sens_c_.a[2] = -0.00515313;  sens_c_.a[3] = -0.0000461345;
-		    sens_c_.a[4] = 0.0025535;
-    		sens_c_.b[1] = -3.765314;   sens_c_.b[2] = 5.313669;
-	    	sens_c_.b[3] = -3.330456;   sens_c_.b[4] = 0.7821078;
-		    rclo_c_.a = 0.002079;   rclo_c_.b = -0.99584;  rclo_c_.K = 121;
-		    avg_num_ = 20;
-		    smpl_rate_ = 800;
-            break;
-        case PstSR1600Hz:
-			band_c_.a[0] = band_c_.a[6] = 8.07852914e-8;
-			band_c_.a[1] = band_c_.a[5] = 4.84711748e-7;
-			band_c_.a[2] = band_c_.a[4] = 1.21177937e-6;
-			band_c_.a[3] = 1.61570583e-6;
-			band_c_.b[1] = -5.46984852; band_c_.b[2] = 12.4879330;
-			band_c_.b[3] = -15.2305828; band_c_.b[4] = 10.4650611;
-			band_c_.b[5] = -3.84070239; band_c_.b[6] = 0.588144766;
-			band_c_.ah = 0.9999;        band_c_.bh = -0.9998;
-    		sens_c_.a[0] = 0.00068655489;   sens_c_.a[1] = 6.1191384e-6;
-	    	sens_c_.a[2] = -0.0013669906;   sens_c_.a[3] = -6.1191384e-6;
-		    sens_c_.a[4] = 0.00068043575;
-    		sens_c_.b[1] = -3.880097;       sens_c_.b[2] = 5.6448073;
-	    	sens_c_.b[3] = -3.6491997;      sens_c_.b[4] = 0.8844899;
-		    rclo_c_.a = 0.0010406;  rclo_c_.b = -0.99792;  rclo_c_.K = 124;
-		    avg_num_ = 40;
-		    smpl_rate_ = 1600;
-            break;
-        case PstSR2560Hz:
-			band_c_.a[0] = band_c_.a[6] = 5.318723435e-9;
-			band_c_.a[1] = band_c_.a[5] = 3.191234061e-8;
-			band_c_.a[2] = band_c_.a[4] = 7.978085152e-8;
-			band_c_.a[3] = 1.063744687e-7;
-			band_c_.b[1] = -5.668303216; band_c_.b[2] = 13.39607301;
-			band_c_.b[3] = -16.89562353; band_c_.b[4] = 11.99384858;
-			band_c_.b[5] = -4.543586172; band_c_.b[6] = 0.7175916763;
-			band_c_.ah = 0.99994;       band_c_.bh = -0.99988;
-    		sens_c_.a[0] = 0.0002738507269;  sens_c_.a[1] = 1.528042052e-6;
-	    	sens_c_.a[2] = -0.0005461734118; sens_c_.a[3] = -1.528042052e-6;
-		    sens_c_.a[4] = 0.0002723226849;
-    		sens_c_.b[1] = -3.924423823;      sens_c_.b[2] = 5.775048124;
-	    	sens_c_.b[3] = -3.776793934;      sens_c_.b[4] = 0.9261697117;
-		    rclo_c_.a = 0.00065062; rclo_c_.b = -0.9987;   rclo_c_.K = 124;
-		    avg_num_ = 80;
-		    smpl_rate_ = 2560;
-            break;
-        default:    // 400Hz
-			band_c_.a[0] = band_c_.a[6] = 0.000151;
-			band_c_.a[1] = band_c_.a[5] = 0.000904;
-			band_c_.a[2] = band_c_.a[4] = 0.00226;
-			band_c_.a[3] = 0.00301;
-			band_c_.b[1] = -3.9315;     band_c_.b[2] = 6.6912;
-			band_c_.b[3] = -6.2495;     band_c_.b[4] = 3.3605;
-			band_c_.b[5] = -0.9828;     band_c_.b[6] = 0.1218;
-			band_c_.ah = 0.99961;       band_c_.bh = -0.99921;
-    		sens_c_.a[0] = 0.00931245;  sens_c_.a[1] = 0.00032762;
-	    	sens_c_.a[2] = -0.01829728; sens_c_.a[3] = -0.00032762;
-		    sens_c_.a[4] = 0.00898483;
-    		sens_c_.b[1] = -3.548754;   sens_c_.b[2] = 4.714548;
-	    	sens_c_.b[3] = -2.776010;   sens_c_.b[4] = 0.610325;
-		    rclo_c_.a = 0.00415;    rclo_c_.b = -0.99170;  rclo_c_.K = 124;
-		    avg_num_ = 20;
-		    smpl_rate_ = 400;
-            break;
-    }
-    
-    memset(band_v_, 0, sizeof(band_v_));
-    memset(sens_v_, 0, sizeof(sens_v_));
-    memset(rclo_v_, 0, sizeof(rclo_v_));
-    memset(&dcf_v_[0][0], 0, sizeof(DCFltrTmpVar));
-    if (!val) return;
-
-    fi = val*val/2;
-    for(i = 0; i < 180; i++) {
-        dcf_v_[0][0].afts[i] = fi;
-    }
-    dcf_v_[0][0].aftavg = fi;
-    memcpy(&dcf_v_[0][1], &dcf_v_[0][0], sizeof(DCFltrTmpVar));
-    memcpy(&dcf_v_[0][2], &dcf_v_[0][0], sizeof(DCFltrTmpVar));
-    for(i = 1; i < kChannelTol; i++) {
-        for(j = 0; j < 3; j++) {
-            memcpy(&dcf_v_[i][j], &dcf_v_[0][0], sizeof(DCFltrTmpVar));
-        }
-    }
-}

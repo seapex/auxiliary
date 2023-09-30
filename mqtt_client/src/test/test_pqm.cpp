@@ -65,8 +65,8 @@ int GetNERec(char *topic, uint8_t *tbuf)
     uint16_t ver = htons(1);
     memcpy(tbuf, &ver, 2);
     int i = 2;
-    tbuf[i++] = 1;  //0=LD1,1=LD2..., 0xff=all LD
-    tbuf[i++] = 2;  //number of range, 0=all range
+    tbuf[i++] = 0;  //0=LD1,1=LD2..., 0xff=all LD
+    tbuf[i++] = 0;  //number of range, 0=all range
     tbuf[i++] = 0;  //0=bgdata, 1=0~10%, 2=10~20%, ..., 10=90~100%
     tbuf[i++] = 3;  //number of record(<16).  0=all record
     i += 2;

@@ -1,10 +1,10 @@
 
 cmake_minimum_required (VERSION 2.8)
-project (FlickerTest)
+project (HaveATest)
 
 # The version number.
 set (_VERSION_MAJOR 1)
-set (_VERSION_MINOR 2)
+set (_VERSION_MINOR 0)
 set (_VERSION_PATCH 0)
 
 macro (add_sources)

@@ -81,8 +81,12 @@ int main(int argc, char *argv[])
             break;
         case kMnQuit:
         case kMnColdboot:
+            SystemCtrl(cmd);
+            break;
         case kUpdate:
             SystemCtrl(cmd);
+            msSleep(3000);
+            watchdog().Enable(7);
             break;
         case kMnReboot:
             SystemCtrl(1);

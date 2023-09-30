@@ -29,7 +29,7 @@ private:
     uint32_t *pst_buf_;     //buffer for pst statistics
 #else
     float *avrgin_[3];  //Average instantaneous flicker value buffer
-    float *pst_buf_;     //buffer for pst statistics
+    float *pst_buf_;    //buffer for pst statistics
 #endif
     int tol_avrg_;      //Total number of average instantaneous flicker value for Pst statistics
     int pinsert_[3];    //The position where the new value will be inserted

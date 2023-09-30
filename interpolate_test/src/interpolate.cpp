@@ -99,12 +99,14 @@ void Interpolate::QuadraticParam(int m0, const int src[], size_t scnt, size_t rc
     for (int i=1; i<n; i++) {
         m[i] = 2*(src[i] - src[i-1]) - m[i-1];
     }
-
     for (int i=0; i<n-1; i++) {
         a_[i] = src[i];
         b_[i] = m[i];
         c_[i] = (m[i+1]-m[i])/2;
     }
+    /*for (int i=0; i<128; i++) {
+        printf("%4d:%6d;%6d,%8g,%8g,%8g\n", i, src[i], m[i], a_[i], b_[i], c_[i]);
+    }//*/
     if (rcnt>1) {
         scnt++;
         memmove(a_, &a_[rcnt-1], scnt*4);
@@ -170,7 +172,9 @@ Spline Interpolate.
 void Interpolate::Splines(int des[], int dcnt, const int src[], int scnt, int rcnt, int type, float *A)
 {
     if (type==1) {  //quadratic
-        QuadraticParam(src[1]-src[0], src, scnt, rcnt);
+        QuadraticParam(src[1]-src[0], src, scnt, rcnt); //用 src[1]-src[0]/1 即相邻两点的斜率 近似代替前一个
+                                                        //插值周期(10周波)最后一个点的导数，便于代码实现
+        //QuadraticParam(0, src, scnt, rcnt);
     } else if (type==2) {   //cubic
         if (scnt+rcnt>max_sz_) {
             printf("%d@%s. scnt+rcnt=%d, out of bounds!!\n", __LINE__, __FUNCTION__, scnt+rcnt);

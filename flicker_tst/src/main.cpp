@@ -23,7 +23,7 @@ struct SquarePara {
 };
 
 const SquarePara sqr_par_[] = {
-    {0.00833333, 2.724},    // 1/2min
+    {0.00833333, 2.724},    // 1/2min, 2.724
     {0.01666667, 2.211},    // 2/2min
     {0.05833333, 1.459},    // 7/2min
     {0.325,      0.906},    // 39/2min
@@ -38,11 +38,10 @@ int pst_x_[4][3];   //sampling point count.[0-3]:4channel, [0-2]:A-C phase
 FlickerStatis *flkr_statis_ = NULL;
 /*!
     Input:  srt -- sampling rate type. 
-            val -- Initial voltage peak value.
 */
-void Initialize(int srt, float val)
+void Initialize(int srt)
 {
-    IniFilterPar(srt, val);
+    IniFilterPar(srt);
     switch (srt) {
         case PstSR400Hz:
             smpl_rate_ = 400;
@@ -71,8 +70,8 @@ Simulative Pst data wave generator
     Input:  num -- number of sampling point will be generated
             chl -- channel. 0-3
             phs -- phase. 0-2:A-C
-            amp -- amplitude
-            dc -- DC component
+            amp -- amplitude. unit:0.01V
+            dc -- DC component. unit:0.01V
     Output: pbuf
 */
 void PstWaveGen(int32_t *pbuf, int num, int chl, int phs, float amp, float dc)
@@ -85,7 +84,8 @@ void PstWaveGen(int32_t *pbuf, int num, int chl, int phs, float amp, float dc)
     
     int x = pst_x_[chl][phs];
     for (int i=0; i<num; i++) {
-        pbuf[i] = amp*(1+m*SquareWave(2*f*x*smpl_t))*cos(2*kM_PI*pow_freq*x*smpl_t - 2*kM_PI*phs/3) + dc;
+        //pbuf[i] = amp*(1+m*SquareWave(2*f*x*smpl_t))*cos(2*kM_PI*pow_freq*x*smpl_t - 2*kM_PI*phs/3) + dc;
+        pbuf[i] = (1+m*SquareWave(2*f*x*smpl_t+0.5))*(amp*cos(2*kM_PI*pow_freq*x*smpl_t - 2*kM_PI*phs/3) + dc);
         x++;
     }
     pst_x_[chl][phs] = x;
@@ -147,7 +147,7 @@ void TestSpeed(int val, int phs, int type)
                 data[k] = wave[k];  //0;
                 data[k] /= 100;
             }
-            int n = FlickerFilter(buf, data, nums, 0, phs);
+            int n = FlickerFilter(buf, wave, nums, 0, phs, 50);
             flkr_statis_->SetAvrgIns(buf, n, phs);
         }
         pst_[i%10] = flkr_statis_->GetPst(phs);
@@ -165,18 +165,19 @@ void TestAccuracy(int cnt, int phs, int type)
     sqr_type_ = type;
     
     int32_t *wave = new int32_t[nums];
-    float *data = new float[nums];
+    //float *data = new float[nums];
     float *buf = new float[nums];
     StopWatch (0, 1, "accuracy:");
+    set_block2(1);
     for (int i=0; i<cnt; i++) {
         if (i%10==0) pst_x_[0][phs] = 0;
         for (int j=0; j<rounds; j++) {
-            PstWaveGen(wave, nums, 0, phs, 10000, 10000/sqrt(2));
-            for (int k=0; k<nums; k++) {
+            PstWaveGen(wave, nums, 0, phs, 0000, -50000);
+            /*for (int k=0; k<nums; k++) {
                 data[k] = wave[k];
                 data[k] /= 100;
-            }
-            int n = FlickerFilter(buf, data, nums, 0, phs);
+            }*/
+            int n = FlickerFilter(buf, wave, nums, 0, phs, 50);
             flkr_statis_->SetAvrgIns(buf, n, phs);
         }
         pst_[i%10] = flkr_statis_->GetPst(phs);
@@ -185,7 +186,7 @@ void TestAccuracy(int cnt, int phs, int type)
     StopWatch (0, 0, NULL);
     delete [] wave;
     delete [] buf;
-    delete [] data;
+    //delete [] data;
 }
 
 int main (int argc, char *argv[])
@@ -194,7 +195,7 @@ int main (int argc, char *argv[])
     int cmd = parse_opt.Parse(argc, argv);
     if (cmd<kSpeedTst) return 0;
         
-    Initialize(PstSR1600Hz, 100);
+    Initialize(PstSR1600Hz);
     if (cmd==kSpeedTst) {
         for (int i=0; i<7; i++) {
             TestSpeed(12, 0, i);   //4channel * 3phase = 12

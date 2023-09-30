@@ -1,5 +1,5 @@
-/*! \file flicker_meas.cpp
-    \brief flicker measurement.
+/*! \file flicker_statis.cpp
+    \brief flicker statistic.
 */
 #include <stdio.h>
 #include <stdlib.h>
