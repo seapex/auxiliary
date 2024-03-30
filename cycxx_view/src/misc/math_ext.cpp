@@ -10,7 +10,7 @@
 /*!
 Generate square wave.
  
-    Input:  time -- cycle is 1
+    Input:  time -- cycle is 2
     Return: y
 */
 float SquareWave(float time)
@@ -18,12 +18,12 @@ float SquareWave(float time)
 	int t;
     t = time/2;
     t *= 2;
-    if(time<0){
-	    if((t-time)>=1) return -1;
+    if (time<0) {   //x,y=(0,-1),-1; [-1,-2),1; [-2,-3),-1; [3,4),1; ...
+	    if((t-time)<1) return -1;
     	else return 1;
-	}else{
-	    if((time-t)>=1) return 1;
-    	else return -1;
+	} else {    //x,y=[0,1),1; [1,2),-1; [2,3),1; [3,4),-1; ...
+        if (time-t<1) return 1;
+        else return -1;
     }
 }
 
@@ -51,10 +51,10 @@ Rotate vector
 void ComplexRotate(CComplexNum *c, int ang)
 {
     float cos_ang, sin_ang;
-    if (!ang) {   //+120▲ i.e. -240▲
+    if (!ang) {   //+120째 i.e. -240째
         cos_ang = -0.5;
         sin_ang = kSqrt3/2;
-    } else {        //+240▲ i.e. -120▲
+    } else {        //+240째 i.e. -120째
         cos_ang = -0.5;
         sin_ang = -kSqrt3/2;
     }

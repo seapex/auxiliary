@@ -8,116 +8,188 @@
 */
 DigitalFilter::DigitalFilter()
 {
-    IniLowPassPara(kButter2nd, 75);
-    IniLowPassPara(kButter3rd, 75);
+    fltr_t_ = 0;
+    omega_c_ = 1;
+    smpl_rate_ = 12800;
+    low_high_ = 0;
+
+    memset(&tmp_var_, 0, sizeof(tmp_var_));
+    tmpv_sz_ = sizeof(tmp_var_)/16;
 }
 
 /*!
-Initialize low pass filter parameter
+Initialize filter parameter
 
-    Input:  type -- kLowPassType
-            fc -- Cut-off frequency. unit:Hz
-    Return: 0=success, 1=type error, 2=fc error
+    Input:  type -- kDFilterType
+            wc -- omega_c, Cut-off frequency. unit:Hz
+            rate -- T=1/rate, sampling rate. unit:Hz
+            lh -- low or high pass. 0=low pass, 1=high pass
+    Return: 0=success, 1=cancel, 2=type error, 3=rate error
 */
-int DigitalFilter::IniLowPassPara(int type, int fc)
+int DigitalFilter::InitPara(int type, float wc, int rate, int lh)
 {
-    switch (type) {
-        case kButter2nd:
-            memset(&butter2_tmp_var_, 0, sizeof(butter2_tmp_var_));
-            switch (fc) {
-                case 75:
-                    butter2_const_.a[0] = butter2_const_.a[2] = 0.00033014;
-                    butter2_const_.a[1] = 0.00066028;
-                    butter2_const_.b[1] = -1.948;
-                    butter2_const_.b[2] = 0.9493;
-                    break;
-                default:
-                    return 2;
+    if (rate<=0) return 3;
+
+    int up = 0;
+    if (fltr_t_ != type) up++;
+    if (omega_c_ != wc) up++;
+    if (smpl_rate_ != rate) up++;
+    if (low_high_ != lh) up++;
+    if (!up) return 1;
+
+    fltr_t_ = type;
+    omega_c_ = wc;
+    smpl_rate_ = rate;
+    low_high_ = lh;
+
+    //memset(&tmp_var_, 0, sizeof(tmp_var_));
+    struct {
+        double a[8]; //coefficient a'0~
+        double b[8]; //coefficient b'0~
+    } tmpcf;    //temporary coefficient
+    double Tw = 2.0*kM_PI*omega_c_/rate;  //T*omega_c
+    switch (fltr_t_) {
+        case kButter1st:
+            if (lh) {
+                tmpcf.a[0] = 2;
+                tmpcf.a[1] = -2;
+            } else {
+                tmpcf.a[0] = tmpcf.a[1] = Tw;
             }
+            tmpcf.b[0] = Tw + 2;
+            tmpcf.b[1] = Tw - 2;
+            break;
+        case kButter2nd:
+            if (lh) {
+                tmpcf.a[0] = tmpcf.a[2] = 10000;
+                tmpcf.a[1] = -20000;
+            } else {
+                tmpcf.a[0] = tmpcf.a[2] = 2500*Tw*Tw;
+                tmpcf.a[1] = tmpcf.a[0]*2;
+            }
+            tmpcf.b[0] = 2500*Tw*Tw + 7071*Tw + 10000;
+            tmpcf.b[1] = 5000*Tw*Tw - 20000;
+            tmpcf.b[2] = 2500*Tw*Tw - 7071*Tw + 10000;
             break;
         case kButter3rd:
-            memset(&butter3_tmp_var_, 0, sizeof(butter3_tmp_var_));
-            switch (fc) {
-                case 75:
-                    butter3_const_.a[0] = butter3_const_.a[3] = 0.00000601195;
-                    butter3_const_.a[1] = butter3_const_.a[2] = 0.000018036;
-                    butter3_const_.b[1] = -2.92638;
-                    butter3_const_.b[2] = 2.85545;
-                    butter3_const_.b[3] = -0.929018;
-                    break;
-                default:
-                    return 2;
+            if (lh) {
+                tmpcf.a[0] = 8;
+                tmpcf.a[1] = -24;
+                tmpcf.a[2] = 24;
+                tmpcf.a[3] = -8;
+            } else {
+                tmpcf.a[0] = tmpcf.a[3] = Tw*Tw*Tw;
+                tmpcf.a[1] = tmpcf.a[2] = 3*tmpcf.a[0];
             }
+            tmpcf.b[0] = Tw*Tw*Tw + 4*Tw*Tw + 8*Tw + 8;
+            tmpcf.b[1] = 3*Tw*Tw*Tw + 4*Tw*Tw - 8*Tw - 24;
+            tmpcf.b[2] = 3*Tw*Tw*Tw - 4*Tw*Tw - 8*Tw + 24;
+            tmpcf.b[3] = Tw*Tw*Tw - 4*Tw*Tw + 8*Tw - 8;
             break;
         default:
-            return 1;
+            return 2;
     }
+    //printf("fltr_t_=%d, lh=%d, wc=%g,smpl_rate_=%d\n", fltr_t_, lh, omega_c_, smpl_rate_);
+    for (int i=0; i<=fltr_t_; i++) {
+        cffcnt_.a[i] = tmpcf.a[i]/tmpcf.b[0];
+        cffcnt_.b[i] = tmpcf.b[i]/tmpcf.b[0];
+        //printf("a[%d]=%g, b[%d]=%g\n", i, cffcnt_.a[i], i, cffcnt_.b[i]);
+    }
+
     return 0;
 }
 
 /*!
-Low pass filter
-    
-    Input:  sv -- sampling value
-            type -- kLowPassType
+Refresh filter parameter
+
+    Input:  idx -- parameter index. 0-3:fltr_t_, omega_c_, smpl_rate_, low_high_
+            pari -- integer parameter
+            parf -- float parameter
 */
-float DigitalFilter::LowPass(float sv, int type)
+void DigitalFilter::RefreshPara(int idx, int pari, float parf)
 {
-    float val;
-    switch (type) {
-        case kButter2nd:
-            val = Butter2(sv);
+    int type = fltr_t_;
+    float wc = omega_c_;
+    int rate = smpl_rate_;
+    int lh = low_high_;
+    switch (idx) {
+        case 0:
+            type = pari;
             break;
-        case kButter3rd:
-            val = Butter3(sv);
+        case 1:
+            wc = parf;
             break;
-        default:
-            val = sv;
+        case 2:
+            rate = pari;
+            break;
+        case 3:
+            lh = pari;
             break;
     }
-    return val;
+    InitPara(type, wc, rate, lh);
 }
 
 /*!
-Butterworth 2nd-order filter
+Filtering of passed signals. 
     
     Input:  sv -- sampling value
 */
-float DigitalFilter::Butter2(float sv)
+float DigitalFilter::SignalPass(float sv)
 {
-    butter2_tmp_var_.x[0] = butter2_tmp_var_.x[1];
-    butter2_tmp_var_.x[1] = butter2_tmp_var_.x[2];
-    butter2_tmp_var_.x[2] = sv;
-    butter2_tmp_var_.y[0] = butter2_tmp_var_.y[1];
-    butter2_tmp_var_.y[1] = butter2_tmp_var_.y[2];
-    butter2_tmp_var_.y[2] = butter2_const_.a[0]*butter2_tmp_var_.x[2] 
-                          + butter2_const_.a[1]*butter2_tmp_var_.x[1] 
-                          + butter2_const_.a[2]*butter2_tmp_var_.x[0]
-                          - butter2_const_.b[1]*butter2_tmp_var_.y[1]
-                          - butter2_const_.b[2]*butter2_tmp_var_.y[0];
-    return butter2_tmp_var_.y[2];
+    memmove(&tmp_var_.x[0], &tmp_var_.x[1], tmpv_sz_*fltr_t_);
+    tmp_var_.x[fltr_t_] = sv;
+    memmove(&tmp_var_.y[0], &tmp_var_.y[1], tmpv_sz_*fltr_t_);
+
+    switch (fltr_t_) {
+        case kButter1st:
+            tmp_var_.y[1] = cffcnt_.a[0]*tmp_var_.x[1] 
+                          + cffcnt_.a[1]*tmp_var_.x[0]
+                          - cffcnt_.b[1]*tmp_var_.y[0];
+            break;
+        case kButter2nd:
+            tmp_var_.y[2] = cffcnt_.a[0]*tmp_var_.x[2] 
+                          + cffcnt_.a[1]*tmp_var_.x[1] 
+                          + cffcnt_.a[2]*tmp_var_.x[0]
+                          - cffcnt_.b[1]*tmp_var_.y[1]
+                          - cffcnt_.b[2]*tmp_var_.y[0];
+            break;
+        case kButter3rd:
+            tmp_var_.y[3] = cffcnt_.a[0]*tmp_var_.x[3]
+                          + cffcnt_.a[1]*tmp_var_.x[2]
+                          + cffcnt_.a[2]*tmp_var_.x[1]
+                          + cffcnt_.a[3]*tmp_var_.x[0]
+                          - cffcnt_.b[1]*tmp_var_.y[2]
+                          - cffcnt_.b[2]*tmp_var_.y[1]
+                          - cffcnt_.b[3]*tmp_var_.y[0];
+            break;
+        case kButter4th:
+            tmp_var_.y[4] = cffcnt_.a[0]*tmp_var_.x[4]
+                          + cffcnt_.a[1]*tmp_var_.x[3]
+                          + cffcnt_.a[2]*tmp_var_.x[2]
+                          + cffcnt_.a[3]*tmp_var_.x[1]
+                          + cffcnt_.a[4]*tmp_var_.x[0]
+                          - cffcnt_.b[1]*tmp_var_.y[3]
+                          - cffcnt_.b[2]*tmp_var_.y[2]
+                          - cffcnt_.b[3]*tmp_var_.y[1]
+                          - cffcnt_.b[4]*tmp_var_.y[0];
+            break;
+        case kButter5th:
+            tmp_var_.y[5] = cffcnt_.a[0]*tmp_var_.x[5]
+                          + cffcnt_.a[1]*tmp_var_.x[4]
+                          + cffcnt_.a[2]*tmp_var_.x[3]
+                          + cffcnt_.a[3]*tmp_var_.x[2]
+                          + cffcnt_.a[4]*tmp_var_.x[1]
+                          + cffcnt_.a[5]*tmp_var_.x[0]
+                          - cffcnt_.b[1]*tmp_var_.y[4]
+                          - cffcnt_.b[2]*tmp_var_.y[3]
+                          - cffcnt_.b[3]*tmp_var_.y[2]
+                          - cffcnt_.b[4]*tmp_var_.y[1]
+                          - cffcnt_.b[5]*tmp_var_.y[0];
+            break;
+        default:
+            tmp_var_.y[fltr_t_] = sv;
+            break;
+    }
+    return tmp_var_.y[fltr_t_];
 }
 
-/*!
-Butterworth 3rd-order filter
-    
-    Input:  sv -- sampling value
-*/
-float DigitalFilter::Butter3(float sv)
-{
-    butter3_tmp_var_.x[0] = butter3_tmp_var_.x[1];
-    butter3_tmp_var_.x[1] = butter3_tmp_var_.x[2];
-    butter3_tmp_var_.x[2] = butter3_tmp_var_.x[3];
-    butter3_tmp_var_.x[3] = sv;
-    butter3_tmp_var_.y[0] = butter3_tmp_var_.y[1];
-    butter3_tmp_var_.y[1] = butter3_tmp_var_.y[2];
-    butter3_tmp_var_.y[2] = butter3_tmp_var_.y[3];
-    butter3_tmp_var_.y[3] = butter3_const_.a[0]*butter3_tmp_var_.x[3] 
-                          + butter3_const_.a[1]*butter3_tmp_var_.x[2] 
-                          + butter3_const_.a[2]*butter3_tmp_var_.x[1]
-                          + butter3_const_.a[3]*butter3_tmp_var_.x[0]
-                          - butter3_const_.b[1]*butter3_tmp_var_.y[2]
-                          - butter3_const_.b[2]*butter3_tmp_var_.y[1]
-                          - butter3_const_.b[3]*butter3_tmp_var_.y[0];
-    return butter3_tmp_var_.y[3];
-}

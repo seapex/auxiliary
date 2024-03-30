@@ -97,3 +97,4 @@ struct NETestStatus {   //Status of 10-minute records
 };
 
 #endif // _NE_MSG_DIF_H_
+

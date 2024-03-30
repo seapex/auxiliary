@@ -24,22 +24,38 @@ struct CycxxFileHead {  //10cycle measurement value save file head
 };
 
 static const int kMaxHarmNum = 50;  //Max orders of harmonic
+
 struct MeasVCyc10LD {    //10cycles(200ms) interval measurement value for LD
     timeval time;
-    
-    float rms_u[2][3];  //Voltage rms. [0-1]:phase-neutral, phase-phase; [0-2]:A-C. unit:V
-    float rms_i[3];     //Current rms. [0-2]:A-C. unit:A
-    float seq[2][3];    //Sequence component. [0-1]:voltage,current. [0-2]:zero,positive,negative. unit:V/A
+
     float hrm_amp_u[3][kMaxHarmNum+1];  //Voltage harmonic amplitude. [0-2]:A-C. [0-50]:0-50. unit:V
     float ihrm_amp_u[3][kMaxHarmNum+1]; //Voltage interharmonic amplitude. [0-2]:A-C. [0-50]:0-50. unit:V
-    float thd[3];       //Voltage THD. unit:%. [0-2]:A-C.
-    float hrm_amp_i[3][kMaxHarmNum+1];    //Current harmonic amplitude. [0-2]:A-C. [0-50]:0-50. unit:A
+    float hrm_amp_i[3][kMaxHarmNum+1];  //Current harmonic amplitude. [0-2]:A-C. [0-50]:0-50. unit:A
     float ihrm_amp_i[3][kMaxHarmNum+1]; //Current interharmonic amplitude. [0-2]:A-C. [0-50]:0-50. unit:A
-    float w[4];     //Active power. A-C,all. unit:kW
-    float var[4];   //Reactive power. A-C,all. unit:kvar
-    float pf[4];    //Power Factor. A-C,all.
-    float frq;      //unit:Hz. <0=invalid data
-    float pst[3];   //[0-2]:A-C. <0=invalid data
+    float dev_u[3][2];  //deviation voltage. [0-2]:A-C/U+,U-,U+-. [0-1]:Uunder, Uover. unit:V.
+    float pst[3];   //[0-2]:A-C/U+,U-,U+-. <0=invalid data
+    float lfo_rms[3];//voltage low frequency oscillation rms. [0-2]:A-C/U+,U-. unit:V
+    
+    union {
+        struct {
+            float thd[3];       //Voltage THD. unit:%. [0-2]:A-C.
+            float rms_u[2][3];  //Voltage rms. [0-1]:phase-neutral, phase-phase; [0-2]:A-C. unit:V
+            float rms_i[3];     //Current rms. [0-2]:A-C. unit:A
+            float seq[2][3];    //Sequence component. [0-1]:voltage,current. [0-2]:zero,positive,negative. unit:V/A
+            float w[4];     //Active power. A-C,all. unit:kW
+            float var[4];   //Reactive power. A-C,all. unit:kvar
+            float pf[4];    //Power Factor. A-C,all.
+            float freq;      //unit:Hz.
+        } ac;
+        struct {
+            float rms_u[3];  //Voltage rms. [0-2]:U+,U-,U+-. unit:V
+            float rms_i[3];  //Current rms. [0-2]:1,2,3i. unit:A
+            float avg_u[3];  //Voltage average. [0-2]:U+,U-,U+-. unit:V
+            float avg_i[3];  //Current average. [0-2]:1,2,3i. unit:A
+            float seq[3];    //Voltage unbalance. [0-2]:U_b,U_u,ε; unit:V,V,%.
+            float rpl[3][2]; //voltage ripple. [0-2]:U+,U-,U+-; [0-1]:coefficient, ratio. unit:%
+            float w[3];      //Active power. 1,2,3i. unit:kW
+        } dc;
+    };
 };
-
 #endif //_CYC10_SAVE_H_

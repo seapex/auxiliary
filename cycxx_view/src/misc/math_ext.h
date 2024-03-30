@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <math.h>
 
-static const float kM_PI = 3.14159265;
+static const double kM_PI = 3.1415926536;
 static const float kSqrt3 = 1.7320508;   //sqrt(3)
 static const float kSqrt2 = 1.4142136;   //sqrt(2)
 
@@ -29,7 +29,7 @@ CVector VectorsDiff(const CVector *c1, const CVector *c2);
 Returns the arc tangent of y/x
 
     Input:  y, x
-    Return: angle. range[0,360)
+    Return: angle, unit:degree. range[0,360)
 */
 inline float ArcTan2(float y, float x)
 {

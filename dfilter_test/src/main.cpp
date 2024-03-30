@@ -11,63 +11,81 @@
 #include "time_cst.h"
 
 static const float kSmpFrq = 12800;
-int sv_buf_[2560];
-int sv_out_[2560];
+const int kSimValNum = 2560; //Number of simulated signal values 
+int sv_buf_[kSimValNum];
+int sv_out_[kSimValNum];
 
 /*!
 Generate simulator signal
+
+    Input:  freq -- The frequency of the simulated signal. unit:Hz
 */
-void GenSignal(float pow_freq)
+void GenSignal(float freq)
 {
     float amp = 1;
 
     double d1;
-    for (int x=0; x<2560; x++) {
-        d1 = amp*sqrt(2)*cos(2*kM_PI*pow_freq*x/kSmpFrq);// + kM_PI/4);
+    for (int x=0; x<kSimValNum; x++) {
+        d1 = amp*sqrt(2)*cos(2*kM_PI*freq*x/kSmpFrq);// + kM_PI/4);
         sv_buf_[x] = d1 * 1000;
     }
 }
 
-void Test(int val)
+/*!
+    Input:  freq -- The frequency of the simulated signal. unit:Hz
+            type -- kDFilterType
+            wc -- omega_c, Cut-off frequency. unit:Hz
+            lh -- low or high pass. 0=low pass, 1=high pass
+*/
+void Test(float freq, int type, float wc, int lh)
 {
-    GenSignal(val);
+    GenSignal(freq);
     DigitalFilter dfilter;
+    dfilter.InitPara(type, wc, kSmpFrq, lh);
     
-    int loops = 10;
+    int loops = 1;
     double d1, d2;
-    StopWatch (0, 1, NULL);
+    StopWatch (0, 1, "dfilter.SignalPass()");
     for (int m=0; m<loops; m++) {
-        for (int j=0; j<12; j++) {
-            for (int i=0; i<2560; i++) {
-                d1 = sv_buf_[i];
-                sv_out_[i] = dfilter.LowPass(d1, kButter3rd);
-            }
+        for (int i=0; i<kSimValNum; i++) {
+            d1 = sv_buf_[i];
+            sv_out_[i] = dfilter.SignalPass(d1);
         }
     }
-    StopWatch (0, 0, "low pass");
+    StopWatch (0, 0, NULL);
 
-    /*printf("sv_buf_ = \n");
-    for (int i=0; i<256; i++) {
-        printf("%d ", sv_buf_[i]);
+    FILE *fp = fopen("filter_out.csv", "w");
+    if (!fp) {
+        printf("open file error\n");
+        return;
     }
-    printf("\n\n");
-    for (int i=0; i<256; i++) {
-        printf("%d ", sv_out_[i]);
+    for (int i=0; i<kSimValNum; i++) {
+        fprintf(fp, "%d,%d\n", sv_buf_[i], sv_out_[i]);
     }
-    printf("\n\n");
-    */
+    fclose(fp);
 }
 
 int main (int argc, char *argv[])
 {
-    if (argc < 2) {
-        printf("Usage: %s [0|1]\n", argv[0]);
+    if (argc < 5) {
+        printf("Usage: %s frq ords wc lh\n", argv[0]);
+        printf("    frq: The frequency of the simulated signal, float. unit:Hz\n");
+        printf("    ords: filter orders. 1-3\n");
+        printf("    w_c: cut-off frequency, float. unit:Hz\n");
+        printf("    lh: 0=low-pass, 1=high-pass\n");
         exit(1);
     }
 
-    int num;
-    sscanf(argv[1], "%d", &num);
-    Test(num);
+    float frq;
+    int type;
+    float wc;
+    int lh;
+    sscanf(argv[1], "%g", &frq);
+    sscanf(argv[2], "%d", &type);
+    sscanf(argv[3], "%g", &wc);
+    sscanf(argv[4], "%d", &lh);
+    
+    Test(frq, type, wc, lh);
 
     return 0;
 }

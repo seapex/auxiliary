@@ -10,6 +10,9 @@ class LoopBufSort:public LoopBuffer<T> {
     using LoopBuffer<T>::buf_size_;
     using LoopBuffer<T>::trash_;
     using LoopBuffer<T>::buffer_;
+    using LoopBuffer<T>::data_num_;
+    using LoopBuffer<T>::head_;
+    using LoopBuffer<T>::tail_;
 public:
     LoopBufSort(int size, int (*compfunc)(const void *, const void *), const char *fname);
     ~LoopBufSort();
@@ -19,22 +22,19 @@ public:
     int Insert(T * data);
     int InsertMax(T * data);
     int Match(T *data, int type);
-    
-    int cust_data(int idx) { if(idx>3) idx=3; return cust_data_[idx]; };
-    
+        
 protected:
 private:
     int (*compare_)(const void *, const void *);
 
     T * tmp_buf_;
-    int cust_data_[4];   //Customized definition
 };
 
 template <class T>
 LoopBufSort<T>::LoopBufSort(int size, int (*compfunc)(const void *, const void *), const char *fname):LoopBuffer<T>(size)
 {
     compare_ = compfunc;
-    tmp_buf_ = new T[buf_size_+1];
+    tmp_buf_ = new T[buf_size_];
     if (fname) LoadFile(fname);
 }
 
@@ -45,7 +45,7 @@ LoopBufSort<T>::~LoopBufSort()
 }
 
 /*!
-Description:Insert data into buffer in ascending order(head=max, tail=min).
+Insert data into buffer in ascending order(head=max, tail=min).
 
     Input:  data -- be inserted
     Return: 0=success, 1=buffer be overflow
@@ -54,12 +54,12 @@ template <class T>
 int LoopBufSort<T>::Insert(T * data)
 {
     T min, max, *ptmp;
-    int num = this->DataNum();
+    int num = data_num_;
     int retval = 0;
     if (!num) this->Push(data);
     else {
-        this->Seek(0);     this->Read(&min);
-        this->Seek(num-1); this->Read(&max);
+        this->set_offset(0);     this->Read(&min);
+        this->set_offset(num-1); this->Read(&max);
         if (compare_(data, &max)>0) retval = this->Push(data);    //data>max
         else {
             if (compare_(data, &min)<0) {                   //data<min
@@ -72,7 +72,7 @@ int LoopBufSort<T>::Insert(T * data)
                     memcpy(&trash_, &tmp_buf_[buf_size_], sizeof(T));
                     retval = 1;
                 }
-            } else {                                        //data¡Ê[min,max]
+            } else {                                        //dataâˆˆ[min,max]
                 ptmp = tmp_buf_;
                 while (!this->Pop(ptmp++));
                 if (!bsearch(data, tmp_buf_, num, sizeof(T), compare_)) {   //not found
@@ -92,7 +92,7 @@ int LoopBufSort<T>::Insert(T * data)
 }
 
 /*!
-Description:Insert data into buffer in ascending order. If overflow, pop minimum data first
+Insert data into buffer in ascending order. If overflow, pop minimum data first
 
     Input:  data -- be inserted
     Return: 0=success, 1=buffer be overflow
@@ -101,16 +101,16 @@ template <class T>
 int LoopBufSort<T>::InsertMax(T * data)
 {
     T min, max, *ptmp;
-    int num = this->DataNum();
+    int num = data_num_;
     int retval = 0;
     if (!num) this->Push(data);
     else {
-        this->Seek(0);     this->Read(&min);
-        this->Seek(num-1); this->Read(&max);
+        this->set_offset(0);     this->Read(&min);
+        this->set_offset(num-1); this->Read(&max);
         if (compare_(data, &max)>0) retval = this->Push(data);    //data>max
         else {
             if (compare_(data, &min)<0) {                   //data<min
-            } else {                                        //data¡Ê[min,max]
+            } else {                                        //dataâˆˆ[min,max]
                 ptmp = tmp_buf_;
                 while (!this->Pop(ptmp++));
                 if (!bsearch(data, tmp_buf_, num, sizeof(T), compare_)) {   //not found
@@ -141,16 +141,16 @@ int LoopBufSort<T>::Match(T *data, int type)
 {
     T min, max, tmpi;
     int retval = -1;
-    int num = this->DataNum();
-    this->Seek(0); this->Read(&min);
-    this->Seek(num-1); this->Read(&max);
+    int num = data_num_;
+    this->set_offset(0); this->Read(&min);
+    this->set_offset(num-1); this->Read(&max);
     if (compare_(data, &min)<0) {       //data < min
         retval = type<0?0:-1;
     } else if (compare_(data, &max)>0) { //data > max
         retval = type>0?0:-1;
-    } else {                            //data¡Ê[min, max]
+    } else {                            //dataâˆˆ[min, max]
         int i = 0;
-        this->Seek(i);
+        this->set_offset(i);
         for (;i<num;i++) {
             this->Read(&tmpi);
             if (compare_(&tmpi, data)==0) {
@@ -167,17 +167,18 @@ int LoopBufSort<T>::Match(T *data, int type)
 }
 
 struct LoopBufSave {
-    int size;
+    int size;   //buf_size_
     int head;
     int tail;
-    int cust_data[4];   //custom data
-    //T buf[size]; //record filename. e.g. 20150809
+    int num;    //data_num_
+    uint8_t ver;    //19. initial version
+    uint8_t reserved[11];
 };
 /*!
-Description:Load value of object from file
+Load value of object from file
 
     Input:  fname -- file name be load
-    Return: 0=success, 1=can't open file, 2=read file error, 3=hd.size<=0
+    Return: 0=success, 1=can't open file, 2=read file error, 3=hd.size<1
 */
 template <class T>
 int LoopBufSort<T>::LoadFile(const char *fname)
@@ -188,18 +189,21 @@ int LoopBufSort<T>::LoadFile(const char *fname)
         LoopBufSave hd;
         int i = fread(&hd, sizeof(LoopBufSave), 1, f_strm);   //read head of save file
         if (i == 1) {
-            memcpy(cust_data_, hd.cust_data, sizeof(cust_data_));
-            if ( hd.size>0 ) {
-                for (buf_size_=0xffff; hd.size<=buf_size_; buf_size_ >>= 1);
-                buf_size_ = (buf_size_<<1) + 1;
+            if ( hd.size>1 ) {
+                buf_size_ = hd.size;
                 if (buffer_) delete [] buffer_;
-                buffer_ = new T[buf_size_+1];
+                buffer_ = new T[buf_size_];
                 if (tmp_buf_) delete [] tmp_buf_;
-                tmp_buf_ = new T[buf_size_+1];
-                this->set_head(hd.head);
-                this->set_tail(hd.tail);
-                i = fread(buffer_, sizeof(T), hd.size+1, f_strm);   //read buffer
-                if (i != hd.size+1) retval = false;
+                tmp_buf_ = new T[buf_size_];
+                head_ = hd.head;
+                tail_ = hd.tail;
+                if (hd.ver==19) data_num_ = hd.num;
+                else {
+                    data_num_ = hd.head - hd.tail;
+                    if (data_num_<0) data_num_ += buf_size_;
+                }
+                i = fread(buffer_, sizeof(T), hd.size, f_strm);   //read buffer
+                if (i != hd.size) retval = false;
             } else retval = 3; 
         } else retval = 2;
         fclose(f_strm);
@@ -223,14 +227,15 @@ int LoopBufSort<T>::SaveFile(const char *fname)
         f_strm = fopen(fname, "wb");
     }
     LoopBufSave hd;
-    hd.size = this->buf_size();
-    hd.head = this->head();
-    hd.tail = this->tail();
-    memcpy(hd.cust_data, cust_data_, sizeof(cust_data_));
+    hd.size = buf_size_;
+    hd.head = head_;
+    hd.tail = tail_;
+    hd.num = data_num_;
+    hd.ver = 19;
     int i = fwrite(&hd, sizeof(LoopBufSave), 1, f_strm);
     if (i == 1) {
-        i = fwrite(buffer_, sizeof(T), hd.size+1, f_strm);
-        if (i != hd.size+1) retval = 2;
+        i = fwrite(buffer_, sizeof(T), hd.size, f_strm);
+        if (i != hd.size) retval = 2;
     } else retval = 2;
     fclose(f_strm);
     return retval;

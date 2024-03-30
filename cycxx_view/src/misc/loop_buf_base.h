@@ -8,25 +8,22 @@
 class LoopBufBase {
 public:
     LoopBufBase(int size);
-    ~LoopBufBase(){};
+    ~LoopBufBase(){}
     
-    int DataNum(){ int i = head_-tail_; return i<0?buf_size_+1+i:i; };  //Return number of valid data
-    void Clear() { head_ = tail_ = 0; };
-    void Seek(int pos);
+    void Clear() { head_ = tail_ = data_num_ = 0; }
 
     //Accessors
-    int buf_size(){ return buf_size_; };
-    int head(){ return head_; };
-    int tail(){ return tail_; };
+    int data_num() { return data_num_; }
+
     //Mutators
-    void set_head(int val) { head_ = val; };
-    void set_tail(int val) { tail_ = val; };
-    int tail_;
+    void set_offset(int val) { offset_ = val; }
     
 protected:
     int buf_size_;
-    int head_;
-    int pos_;
+    int data_num_;  //The number of data in the buffer
+    int head_;      //Points to the next data to be written
+    int tail_;      //Point to the oldest data
+    int offset_;    //The offset from the tail_
 private:
 };
 
