@@ -8,10 +8,10 @@
 */
 DigitalFilter::DigitalFilter()
 {
-    fltr_t_ = 0;
-    omega_c_ = 1;
+    fltr_t_ = 0;    //none
+    freq_c_ = 100;  //1Hz
     smpl_rate_ = 12800;
-    low_high_ = 0;
+    low_high_ = 0;  //low pass
 
     memset(&tmp_var_, 0, sizeof(tmp_var_));
     tmpv_sz_ = sizeof(tmp_var_)/16;
@@ -21,24 +21,24 @@ DigitalFilter::DigitalFilter()
 Initialize filter parameter
 
     Input:  type -- kDFilterType
-            wc -- omega_c, Cut-off frequency. unit:Hz
+            fc -- Cut-off frequency. unit:0.01Hz
             rate -- T=1/rate, sampling rate. unit:Hz
             lh -- low or high pass. 0=low pass, 1=high pass
-    Return: 0=success, 1=cancel, 2=type error, 3=rate error
+    Return: 1=success, 0=cancel,type error,rate error
 */
-int DigitalFilter::InitPara(int type, float wc, int rate, int lh)
+int DigitalFilter::InitPara(int type, int fc, int rate, int lh)
 {
-    if (rate<=0) return 3;
+    if (rate<=0) return 0;
 
     int up = 0;
     if (fltr_t_ != type) up++;
-    if (omega_c_ != wc) up++;
+    if (freq_c_ != fc) up++;
     if (smpl_rate_ != rate) up++;
     if (low_high_ != lh) up++;
-    if (!up) return 1;
+    if (!up) return 0;
 
     fltr_t_ = type;
-    omega_c_ = wc;
+    freq_c_ = fc;
     smpl_rate_ = rate;
     low_high_ = lh;
 
@@ -47,7 +47,7 @@ int DigitalFilter::InitPara(int type, float wc, int rate, int lh)
         double a[8]; //coefficient a'0~
         double b[8]; //coefficient b'0~
     } tmpcf;    //temporary coefficient
-    double Tw = 2.0*kM_PI*omega_c_/rate;  //T*omega_c
+    double Tw = 2.0*kM_PI*freq_c_/100/rate;  //T*omega_c
     switch (fltr_t_) {
         case kButter1st:
             if (lh) {
@@ -87,46 +87,30 @@ int DigitalFilter::InitPara(int type, float wc, int rate, int lh)
             tmpcf.b[3] = Tw*Tw*Tw - 4*Tw*Tw + 8*Tw - 8;
             break;
         default:
-            return 2;
+            return 0;
     }
-    //printf("fltr_t_=%d, lh=%d, wc=%g,smpl_rate_=%d\n", fltr_t_, lh, omega_c_, smpl_rate_);
+    //printf("fltr_t_=%d, lh=%d, wc=%d,smpl_rate_=%d\n", fltr_t_, lh, freq_c_, smpl_rate_);
     for (int i=0; i<=fltr_t_; i++) {
         cffcnt_.a[i] = tmpcf.a[i]/tmpcf.b[0];
         cffcnt_.b[i] = tmpcf.b[i]/tmpcf.b[0];
         //printf("a[%d]=%g, b[%d]=%g\n", i, cffcnt_.a[i], i, cffcnt_.b[i]);
     }
 
-    return 0;
+    return 1;
 }
 
 /*!
 Refresh filter parameter
 
-    Input:  idx -- parameter index. 0-3:fltr_t_, omega_c_, smpl_rate_, low_high_
-            pari -- integer parameter
-            parf -- float parameter
+    Input:  idx -- parameter index. 0-3:fltr_t_, freq_c_, smpl_rate_, low_high_
+            par -- parameter
 */
-void DigitalFilter::RefreshPara(int idx, int pari, float parf)
+void DigitalFilter::RefreshPara(int idx, int par)
 {
-    int type = fltr_t_;
-    float wc = omega_c_;
-    int rate = smpl_rate_;
-    int lh = low_high_;
-    switch (idx) {
-        case 0:
-            type = pari;
-            break;
-        case 1:
-            wc = parf;
-            break;
-        case 2:
-            rate = pari;
-            break;
-        case 3:
-            lh = pari;
-            break;
-    }
-    InitPara(type, wc, rate, lh);
+    int prm[4] = {fltr_t_, freq_c_, smpl_rate_, low_high_};
+    prm[idx] = par;
+
+    InitPara(prm[0], prm[1], prm[2], prm[3]);
 }
 
 /*!

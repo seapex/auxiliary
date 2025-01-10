@@ -21,4 +21,5 @@ killall ntpclient
 #adjtimex -f $FreqErr
 #ntpclient -s -i 15 -g 10000 -h $Addr
 #ntpclient -i $SyncCycle -l -h $Addr >/tmp/ntpclient.log &
-ntpclient -f $FreqErr -s -g 10000 -l -i $SyncCycle -h $Addr -t >/tmp/ntpclient.log &
+#ntpclient -f $FreqErr -s -g 10000 -l -i $SyncCycle -h $Addr -t >/tmp/ntpclient.log &
+ntpclient -f $FreqErr -s -g 10000 -i $SyncCycle -h $Addr -t >/tmp/ntpclient.log &

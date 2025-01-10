@@ -15,6 +15,7 @@
 
 #include "commu4scnet.h"
 #include "misc.h"
+#include "parse_optn_scnet.h"
 
 static const uint8_t kGroupMac[6] = {0xB1, 0xE0, 0x14, 0x03, 0x08, 0x01};
 static const uint8_t kBoyuuOUI[3] = {0xB0, 0xE0, 0x14};
@@ -34,7 +35,8 @@ CommuForScnet::CommuForScnet()
     
     sock_ll_ = new sockaddr_ll;
   	memset(sock_ll_, 0, sizeof(sockaddr_ll));
-    if (GetLocalMac(src_mac_, &sock_ll_->sll_ifindex, "eth1")<0) {    //enp0s3
+    if (GetLocalMac(src_mac_, &sock_ll_->sll_ifindex, "eth1")<0) {
+    //if (GetLocalMac(src_mac_, &sock_ll_->sll_ifindex, "enp0s3")<0) {
         exit(-1);
     }
     eth_type_ = 0xB0E0;
@@ -50,6 +52,162 @@ CommuForScnet::~CommuForScnet()
         close (socket_fd_);
     }
     
+}
+
+/*!
+Batch set the parameters of several devices
+
+    Input:  par -- 
+    Retrun: <0=failure
+*/
+int CommuForScnet::BatchSet(const BatchSetParam *par)
+{
+    uint8_t scnet_mac[6] = {0xB0, 0xE0, 0x14};
+    int retv = 0;
+    uint32_t cx[2];
+
+    DebugCmd(1);
+    for (int i=0; i<4; i++) {
+        //printf("%d; %d:%d; %x-%x-%x %f,%f %d\n", scnet[i], ratio[2*i], ratio[2*i+1], mac[3*i], mac[3*i+1], mac[3*i+2], c1c2[2*i], c1c2[2*i+1], rllc);
+        int up = 0;
+        if (par->scnet[i]) {
+            memcpy(&scnet_mac[3], par->mac[i], 3);
+            retv = GetParam(NULL, scnet_mac);
+            //printf("trns_rto=%d,%d\n", par4scnet_.trns_rto[0], par4scnet_.trns_rto[1]);
+            if ( par->trns_rto[i][0] && par->trns_rto[i][1] ) {
+                if ( memcmp(par4scnet_.trns_rto, par->trns_rto[i], 8) ) {
+                    memcpy(par4scnet_.trns_rto, par->trns_rto[i], 8);
+                    //printf("trns_rto=%d,%d\n", par4scnet_.trns_rto[0], par4scnet_.trns_rto[1]);
+                    up++;
+                }
+            }
+            if (par->c1c2[i][0] && par->c1c2[i][1]) {
+                memcpy(cx, par->c1c2[i], sizeof(cx));
+                if ( memcmp(par4scnet_.cvt_c1c2, cx, 8) ) {
+                    memcpy(par4scnet_.cvt_c1c2, cx, 8);
+                    up++;
+                }
+            }
+            if ( par->rllc && par->rllc != par4scnet_.cvt_prl_res ) {
+                par4scnet_.cvt_prl_res = par->rllc;
+                up++;
+            }
+            if (par->svtype[i]==0 || par->svtype[i]==1) {
+                par4scnet_.svtyp = par->svtype[i];
+                up++;
+            }
+            if ( par->app_id && par->app_id != par4scnet_.app_id ) {
+                par4scnet_.app_id = par->app_id;
+                up++;
+            }
+            if (up) {
+                retv = SetParam(NULL, scnet_mac);
+            }
+        }
+    }
+    DebugCmd(0);
+    return retv;
+}
+
+inline int CommuForScnet::CheckMacAddr(const uint8_t *mac)
+{
+    if (!mac) {
+        printf("Missing MAC address!\n");
+        return 2;
+    }
+    if (memcmp(mac, kBoyuuOUI, 3)) {
+        printf("Invalid MAC address! %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+/*!
+Send debug command
+
+    Input:  cmdn -- command number. 1=Switch to debug mode, 2=clear debug information, 3=get debug information
+                    other=Return to working mode.
+            mac -- The MAC address of the scnet. NULL=group mac
+    Return:  <0=failure
+*/
+int CommuForScnet::DebugCmd(uint8_t cmdn, const uint8_t *mac)
+{
+    CrtlMacFrame tbuf;
+    uint8_t gmac = 0;
+    if (mac) {
+        if (CheckMacAddr(mac)) return -1;
+        memcpy(tbuf.desMac, mac, 6);
+    } else { 
+        memcpy(tbuf.desMac, kGroupMac, 6);
+        gmac = 1;
+        printf("Debug command %d is send to %02X:%02X:%02X:%02X:%02X:%02X\n", cmdn, 
+               tbuf.desMac[0], tbuf.desMac[1], tbuf.desMac[2], tbuf.desMac[3], tbuf.desMac[4], tbuf.desMac[5]);
+    }
+    memcpy(tbuf.srcMac, src_mac_, 6);
+    tbuf.ethertype = htons(eth_type_);
+    tbuf.length = htons(sizeof(Debug4Scnet)+4);
+    tbuf.cmd = htons(kDebug);
+    tbuf.res[0] = cmdn;
+    memcpy(&tbuf.data.dbg_inf, &dbg4scnet_, sizeof(dbg4scnet_));
+    SwapBytes(&tbuf.data.dbg_inf, 0, 1);
+    
+    uint8_t *pbuf = (uint8_t *)&tbuf;
+    uint32_t crc = crc32(0, Z_NULL, 0);
+    crc = crc32(crc, pbuf, sizeof(Debug4Scnet)+20);
+    memcpy(&pbuf[sizeof(Debug4Scnet)+20], &crc, 4);
+
+    int retv = -1, i, cnt;
+    CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
+    for (i=0; i<3; i++) {
+        sendto(socket_fd_, &tbuf, sizeof(Debug4Scnet)+24, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
+        if (gmac) break;
+        if (!mac) {
+            msSleep(100);
+            retv = 0;
+            break;
+        } else {
+            StopWatch(0, 1, NULL);
+        }
+        for (;;) {
+            cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
+            if(cnt>0) {
+                if (ntohs(rbuf->ethertype)!=eth_type_) {
+                } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kDebug) {
+                    uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
+                    crc = crc32(0, Z_NULL, 0);
+                    if (fcs==crc32(crc, rx_buf_, cnt-4)) {
+                        StopWatch(0, 0, NULL);
+                        printf("Debug command send succeed >> %02X:%02X:%02X:%02X:%02X:%02X; time=%6.3fms\n", 
+                                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], stopwatch_dur(0)*1000);
+                        if (cmdn==3) {
+                            Debug4Scnet *par = &dbg4scnet_;
+                            memcpy(par, &rbuf->data.dbg_inf, sizeof(dbg4scnet_));
+                            SwapBytes(par, 1, 1);
+                            printf("DMA2_Stream0_IRQHandler():\n");
+                            printf("  dbg16[0-3]=%05d %05d %05d %05d\n", par->dbg16[0], par->dbg16[1], par->dbg16[2], par->dbg16[3]);
+                            printf("CVTHandle():\n");
+                            printf("  fifo_idc_[c1,c2].dc=%d,%d; c1(max/min)=%d/%d\n", par->dbg16[4], par->dbg16[5], par->dbg16[6], par->dbg16[7]);
+                            printf("  udc(current/max/min)=%d/%d/%d; smp_pns=%d\n", par->dbg32[0], par->dbg32[1], par->dbg32[2], par->dbg32[3]);
+                            printf("  fifo_idc_[c1,c2].sum=%d,%d\n", par->dbg32[4], par->dbg32[5]);
+                            printf("  fifo_udc_.sum=%13lld\n", par->dbg64[0]);
+                            float di[3];
+                            for (int i=0; i<3; i++) di[i] = par->pwrsply[i]; 
+                            printf("Power supply(V) ADC_Read():\n");
+                            printf("  min/avg/max=%g/%g/%g\n", di[0]/1000, di[1]/1000, di[2]/1000);
+                        }
+                        retv = 0;
+                        break;
+                    }
+                }
+            }
+            StopWatch(0, 0, NULL);
+            if (stopwatch_dur(0)>1) break;
+        }
+        if (!retv) break;
+        else printf("Debug command send failure!\n");
+    }
+    return retv;   
 }
 
 /*!
@@ -81,95 +239,63 @@ int CommuForScnet::GetLocalMac(uint8_t *mac, int *idx, const char *name)
 	return ret;
 }
 
-inline int CommuForScnet::CheckMacAddr(const uint8_t *mac)
-{
-    if (!mac) {
-        printf("Missing MAC address!\n");
-        return 2;
-    }
-    if (memcmp(mac, kBoyuuOUI, 3)) {
-        printf("Invalid MAC address! %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-        return 1;
-    } else {
-        return 0;
-    }
-}
-
 /*!
-Set MAC address to scnet
+Get parameter from scnet
 
-    Input:  mac -- The MAC address of the scnet will be set
-            dmac -- current mac of the scnet. NULL=group mac
+    Input:  filename -- The configuration file used to store the parameters
+            mac -- The MAC address of the scnet
     Return:  <0=failure
 */
-int CommuForScnet::SetMacAddr(const uint8_t *mac, const uint8_t *dmac)
+int CommuForScnet::GetParam(const char *filename, const uint8_t *mac)
 {
     if (CheckMacAddr(mac)) return -1;
-
+    
     CrtlMacFrame tbuf;
-    if (dmac) memcpy(tbuf.desMac, dmac, 6);
-    else memcpy(tbuf.desMac, kGroupMac, 6);
+    memcpy(tbuf.desMac, mac, 6);
     memcpy(tbuf.srcMac, src_mac_, 6);
     tbuf.ethertype = htons(eth_type_);
     tbuf.length = htons(44);
-    tbuf.cmd = htons(kSetMac);
-    memcpy(tbuf.data.mac.dev_mac, mac, 6);
+    tbuf.cmd = htons(kGetPar);
     uint32_t crc = crc32(0, Z_NULL, 0);
     uint8_t *pbuf = (uint8_t *)&tbuf;
     crc = crc32(crc, pbuf, 60);
     memcpy(&pbuf[60], &crc, 4);
 
-    int i;
+    int retv = -1, i, cnt;
+    CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
     for (i=0; i<3; i++) {
         sendto(socket_fd_, &tbuf, 64, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
-        msSleep(50);
-        if (!MacPing(mac, 0)) {
-            printf("Seting MAC %02X:%02X:%02X:%02X:%02X:%02X succeed\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-            break;
+        StopWatch(0, 1, NULL);
+        for (;;) {
+            cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
+            if(cnt>0) {
+                if (ntohs(rbuf->ethertype)!=eth_type_) {
+                } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kGetPar) {
+                    uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
+                    crc = crc32(0, Z_NULL, 0);
+                    if (fcs==crc32(crc, rx_buf_, cnt-4)) {
+                        StopWatch(0, 0, NULL);
+                        retv = 0;
+                        memcpy(&par4scnet_, &rbuf->data.para, sizeof(par4scnet_));
+                        SwapBytes(&par4scnet_, 1, 0);
+                        if (filename) {
+                            printf("%d bytes from %02X:%02X:%02X:%02X:%02X:%02X; time=%6.3fms\n", 
+                                     cnt, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], stopwatch_dur(0)*1000);
+                            SaveParam(filename, &par4scnet_);
+                        }
+                        break;
+                    }
+                }
+            }
+            StopWatch(0, 0, NULL);
+            if (stopwatch_dur(0)>1) break;
+        }
+        if (!retv) break;
+        else {
+            if (filename) printf("Get parameter failed!\n");
         }
     }
-    if(i>=3) {
-        printf("Set MAC %02X:%02X:%02X:%02X:%02X:%02X failed!!!\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-        return -1;
-    }
-    return 0;
-}
-
-/*!
-Save parameter to configuration file
-
-    Input:  filename -- The configuration file used to store the parameters
-            par -- parameter
-*/
-void CommuForScnet::SaveParam(const char *filename, Para4Scnet *par)
-{
-    printf("FirmwareVer:%d.%d.%d\n", par->ver[0][0], par->ver[0][1], par->ver[0][2]);
-    FILE *fstrm = fopen(filename, "w");
-    if (!fstrm) {
-        printf("Cannot create %s!\n", filename);
-        return;
-    }
-    fprintf(fstrm, "%s:%d.%d.%d\n", kParamName[kFirmVer], par->ver[0][0], par->ver[0][1], par->ver[0][2]);
-    fprintf(fstrm, "%s=%s\n", kParamName[kDevModel], DeviceModelStr[par->dev_model]);
-    fprintf(fstrm, "%s=%d,%d,%d,%d\n", kParamName[kADCBkgrdDC], par->adc_dc[0], par->adc_dc[1], par->adc_dc[2], par->adc_dc[3]);
-    float fi[4];
-    for (int i=0; i<4; i++) {
-        fi[i] = par->corr[i];
-        fi[i] /= 10000;
-    }
-    fprintf(fstrm, "%s=%6.4f,%6.4f,%6.4f,%6.4f\n", kParamName[kCorrFactor], fi[0], fi[1], fi[2], fi[3]);
-    fprintf(fstrm, "%s=%d,%d\n", kParamName[kPT_CT], par->trns_rto[0], par->trns_rto[1]);
-    memcpy(fi, par->cvt_c1c2, sizeof(par->cvt_c1c2));
-    fprintf(fstrm, "%s=%f,%f\n", kParamName[kCVT_C1C2], fi[0], fi[1]);
-    fprintf(fstrm, "%s=%d\n", kParamName[kCVTllRes], par->cvt_prl_res);
-    char ps[2] = {'p', 's'};
-    fprintf(fstrm, "%s=%c\n", kParamName[kSVType], ps[par->svtyp&1]);
-    fprintf(fstrm, "%s=%02X:%02X\n", kParamName[kDesMAC45], par->des_mac[0], par->des_mac[1]);
-    fprintf(fstrm, "%s=%X\n", kParamName[kAppID], par->app_id);
-    fprintf(fstrm, "%s=%d\n", kParamName[kCVTWireMethod], par->cvt_wire);
-    fprintf(fstrm, "%s=%d\n", kParamName[kCVTSigC1C2], par->sig_c1c2);
-
-    fclose(fstrm);
+    return retv;
 }
 
 /*!
@@ -270,127 +396,6 @@ int CommuForScnet::LoadParam(Para4Scnet *par, const char *filename)
 }
 
 /*!
-Get parameter from scnet
-
-    Input:  filename -- The configuration file used to store the parameters
-            mac -- The MAC address of the scnet
-    Return:  <0=failure
-*/
-int CommuForScnet::GetParam(const char *filename, const uint8_t *mac)
-{
-    if (CheckMacAddr(mac)) return -1;
-    
-    CrtlMacFrame tbuf;
-    memcpy(tbuf.desMac, mac, 6);
-    memcpy(tbuf.srcMac, src_mac_, 6);
-    tbuf.ethertype = htons(eth_type_);
-    tbuf.length = htons(44);
-    tbuf.cmd = htons(kGetPar);
-    uint32_t crc = crc32(0, Z_NULL, 0);
-    uint8_t *pbuf = (uint8_t *)&tbuf;
-    crc = crc32(crc, pbuf, 60);
-    memcpy(&pbuf[60], &crc, 4);
-
-    int retv = -1, i, cnt;
-    CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
-    for (i=0; i<3; i++) {
-        sendto(socket_fd_, &tbuf, 64, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
-        StopWatch(0, 1, NULL);
-        for (;;) {
-            cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
-            if(cnt>0) {
-                if (ntohs(rbuf->ethertype)!=eth_type_) {
-                } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kGetPar) {
-                    uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
-                    crc = crc32(0, Z_NULL, 0);
-                    if (fcs==crc32(crc, rx_buf_, cnt-4)) {
-                        StopWatch(0, 0, NULL);
-                        retv = 0;
-                        memcpy(&par4scnet_, &rbuf->data.para, sizeof(par4scnet_));
-                        SwapBytes(&par4scnet_, 1, 0);
-                        if (filename) {
-                            printf("%d bytes from %02X:%02X:%02X:%02X:%02X:%02X; time=%6.3fms\n", 
-                                     cnt, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], stopwatch_dur(0)*1000);
-                            SaveParam(filename, &par4scnet_);
-                        }
-                        break;
-                    }
-                }
-            }
-            StopWatch(0, 0, NULL);
-            if (stopwatch_dur(0)>1) break;
-        }
-        if (!retv) break;
-        else {
-            if (filename) printf("Get parameter failed!\n");
-        }
-    }
-    return retv;
-}
-
-/*!
-Set parameter to scnet
-
-    Input:  filename -- The configuration file used to load the parameters
-            mac -- The MAC address of the scnet
-    Return:  <0=failure
-*/
-int CommuForScnet::SetParam(const char *filename, const uint8_t *mac)
-{
-    if (CheckMacAddr(mac)) return -1;
-    
-    CrtlMacFrame tbuf;
-    memcpy(tbuf.desMac, mac, 6);
-    memcpy(tbuf.srcMac, src_mac_, 6);
-    tbuf.ethertype = htons(eth_type_);
-    tbuf.length = htons(sizeof(Para4Scnet)+4);
-    tbuf.cmd = htons(kSetPar);
-    if (filename) {
-        if ( LoadParam(&tbuf.data.para, filename) ) {
-            printf("Error loading parameters from file!\n");
-            return -1;
-        }
-    } else {
-        memcpy(&tbuf.data.para, &par4scnet_, sizeof(par4scnet_));
-    }
-    SwapBytes(&tbuf.data.para, 0, 0);
-    
-    uint8_t *pbuf = (uint8_t *)&tbuf;
-    uint32_t crc = crc32(0, Z_NULL, 0);
-    crc = crc32(crc, pbuf, sizeof(Para4Scnet)+20);
-    memcpy(&pbuf[sizeof(Para4Scnet)+20], &crc, 4);
-
-    int retv = -1, i, cnt;
-    CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
-    for (i=0; i<3; i++) {
-        sendto(socket_fd_, &tbuf, sizeof(Para4Scnet)+24, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
-        StopWatch(0, 1, NULL);
-        for (;;) {
-            cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
-            if(cnt>0) {
-                if (ntohs(rbuf->ethertype)!=eth_type_) {
-                } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kSetPar) {
-                    uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
-                    crc = crc32(0, Z_NULL, 0);
-                    if (fcs==crc32(crc, rx_buf_, cnt-4)) {
-                        StopWatch(0, 0, NULL);
-                        printf("Set parameters succeed >> %02X:%02X:%02X:%02X:%02X:%02X. time=%6.3fms\n", 
-                                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], stopwatch_dur(0)*1000);
-                        retv = 0;
-                        break;
-                    }
-                }
-            }
-            StopWatch(0, 0, NULL);
-            if (stopwatch_dur(0)>1) break;
-        }
-        if (!retv) break;
-        else printf("Set parameters failed!\n");
-    } 
-    return retv;
-}
-
-/*!
 ping MAC packet
 
     Input:  mac -- destination MAC address
@@ -464,9 +469,9 @@ Open upgrade file
             fc -- force. 1=yes
     Output: ver -- version of upgrade file. uint8_t[3]
 */
-const char *verstr[2] = {"kFirmVerA", "kFirmVerB"};
 FILE *CommuForScnet::OpenUpFile(uint8_t *ver, const char *filename, int vdx, uint8_t fc)
 {
+    const char *verstr[2] = {"kFirmVerA", "kFirmVerB"};
     FILE *fstrm = fopen(filename, "rb");
     if (!fstrm) {
         printf("Cannot open %s!\n", filename);
@@ -506,6 +511,252 @@ FILE *CommuForScnet::OpenUpFile(uint8_t *ver, const char *filename, int vdx, uin
         fstrm = NULL;
     }
     return fstrm;
+}
+
+/*!
+Set MAC address to scnet
+
+    Input:  mac -- The MAC address of the scnet will be set
+            dmac -- current mac of the scnet. NULL=group mac
+    Return:  <0=failure
+*/
+int CommuForScnet::SetMacAddr(const uint8_t *mac, const uint8_t *dmac)
+{
+    if (CheckMacAddr(mac)) return -1;
+
+    CrtlMacFrame tbuf;
+    if (dmac) memcpy(tbuf.desMac, dmac, 6);
+    else memcpy(tbuf.desMac, kGroupMac, 6);
+    memcpy(tbuf.srcMac, src_mac_, 6);
+    tbuf.ethertype = htons(eth_type_);
+    tbuf.length = htons(44);
+    tbuf.cmd = htons(kSetMac);
+    memcpy(tbuf.data.mac.dev_mac, mac, 6);
+    uint32_t crc = crc32(0, Z_NULL, 0);
+    uint8_t *pbuf = (uint8_t *)&tbuf;
+    crc = crc32(crc, pbuf, 60);
+    memcpy(&pbuf[60], &crc, 4);
+
+    int i;
+    for (i=0; i<3; i++) {
+        sendto(socket_fd_, &tbuf, 64, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
+        msSleep(50);
+        if (!MacPing(mac, 0)) {
+            printf("Seting MAC %02X:%02X:%02X:%02X:%02X:%02X succeed\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+            break;
+        }
+    }
+    if(i>=3) {
+        printf("Set MAC %02X:%02X:%02X:%02X:%02X:%02X failed!!!\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        return -1;
+    }
+    return 0;
+}
+
+/*!
+Set parameter to scnet
+
+    Input:  filename -- The configuration file used to load the parameters. NULL=use the current parameters
+            mac -- The MAC address of the scnet
+    Return:  <0=failure
+*/
+int CommuForScnet::SetParam(const char *filename, const uint8_t *mac)
+{
+    if (CheckMacAddr(mac)) return -1;
+    
+    CrtlMacFrame tbuf;
+    memcpy(tbuf.desMac, mac, 6);
+    memcpy(tbuf.srcMac, src_mac_, 6);
+    tbuf.ethertype = htons(eth_type_);
+    tbuf.length = htons(sizeof(Para4Scnet)+4);
+    tbuf.cmd = htons(kSetPar);
+    if (filename) {
+        if ( LoadParam(&tbuf.data.para, filename) ) {
+            printf("Error loading parameters from file!\n");
+            return -1;
+        }
+    } else {
+        memcpy(&tbuf.data.para, &par4scnet_, sizeof(par4scnet_));
+    }
+    SwapBytes(&tbuf.data.para, 0, 0);
+    
+    uint8_t *pbuf = (uint8_t *)&tbuf;
+    uint32_t crc = crc32(0, Z_NULL, 0);
+    crc = crc32(crc, pbuf, sizeof(Para4Scnet)+20);
+    memcpy(&pbuf[sizeof(Para4Scnet)+20], &crc, 4);
+
+    int retv = -1, i, cnt;
+    CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
+    for (i=0; i<3; i++) {
+        sendto(socket_fd_, &tbuf, sizeof(Para4Scnet)+24, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
+        StopWatch(0, 1, NULL);
+        for (;;) {
+            cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
+            if(cnt>0) {
+                if (ntohs(rbuf->ethertype)!=eth_type_) {
+                } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kSetPar) {
+                    uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
+                    crc = crc32(0, Z_NULL, 0);
+                    if (fcs==crc32(crc, rx_buf_, cnt-4)) {
+                        StopWatch(0, 0, NULL);
+                        printf("Set parameters succeed >> %02X:%02X:%02X:%02X:%02X:%02X. time=%6.3fms\n", 
+                                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], stopwatch_dur(0)*1000);
+                        retv = 0;
+                        break;
+                    }
+                }
+            }
+            StopWatch(0, 0, NULL);
+            if (stopwatch_dur(0)>1) break;
+        }
+        if (!retv) break;
+        else printf("Set parameters failed!\n");
+    } 
+    return retv;
+}
+
+/*!
+Save parameter to configuration file
+
+    Input:  filename -- The configuration file used to store the parameters
+            par -- parameter
+*/
+void CommuForScnet::SaveParam(const char *filename, Para4Scnet *par)
+{
+    printf("FirmwareVer:%d.%d.%d\n", par->ver[0][0], par->ver[0][1], par->ver[0][2]);
+    FILE *fstrm = fopen(filename, "w");
+    if (!fstrm) {
+        printf("Cannot create %s!\n", filename);
+        return;
+    }
+    fprintf(fstrm, "%s:%d.%d.%d\n", kParamName[kFirmVer], par->ver[0][0], par->ver[0][1], par->ver[0][2]);
+    fprintf(fstrm, "%s=%s\n", kParamName[kDevModel], DeviceModelStr[par->dev_model]);
+    fprintf(fstrm, "%s=%d,%d,%d,%d\n", kParamName[kADCBkgrdDC], par->adc_dc[0], par->adc_dc[1], par->adc_dc[2], par->adc_dc[3]);
+    float fi[4];
+    for (int i=0; i<4; i++) {
+        fi[i] = par->corr[i];
+        fi[i] /= 10000;
+    }
+    fprintf(fstrm, "%s=%6.4f,%6.4f,%6.4f,%6.4f\n", kParamName[kCorrFactor], fi[0], fi[1], fi[2], fi[3]);
+    fprintf(fstrm, "%s=%d,%d\n", kParamName[kPT_CT], par->trns_rto[0], par->trns_rto[1]);
+    memcpy(fi, par->cvt_c1c2, sizeof(par->cvt_c1c2));
+    fprintf(fstrm, "%s=%f,%f\n", kParamName[kCVT_C1C2], fi[0], fi[1]);
+    fprintf(fstrm, "%s=%d\n", kParamName[kCVTllRes], par->cvt_prl_res);
+    char ps[2] = {'p', 's'};
+    fprintf(fstrm, "%s=%c\n", kParamName[kSVType], ps[par->svtyp&1]);
+    fprintf(fstrm, "%s=%02X:%02X\n", kParamName[kDesMAC45], par->des_mac[0], par->des_mac[1]);
+    fprintf(fstrm, "%s=%X\n", kParamName[kAppID], par->app_id);
+    fprintf(fstrm, "%s=%d\n", kParamName[kCVTWireMethod], par->cvt_wire);
+    fprintf(fstrm, "%s=%d\n", kParamName[kCVTSigC1C2], par->sig_c1c2);
+
+    fclose(fstrm);
+}
+
+/*!
+Sniffing MAC source address
+*/
+void CommuForScnet::Sniff()
+{
+    extern bool g_doIt;
+    static uint8_t smac_[64][6];
+    static uint8_t smac_nm_ = 0;
+    static uint32_t smac_cnt_[64][2];   //[0-1]:total count, error count
+    int cnt;
+    uint32_t crc, fcs;
+    CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
+
+    printf ("Hit ^c to exit ... \n");
+    memset(smac_cnt_, 0, sizeof(smac_cnt_));
+    int n = 0;
+    for (;;) {
+        cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
+        if(cnt>0) {
+            int j, hv = 0;
+            for (j=0; j<smac_nm_; j++) {
+                if (!memcmp(smac_[j], rbuf->srcMac, 6)) {
+                    hv = 1;
+                    break;
+                }
+            }
+            //printf("j=%d, hv=%d\n", j, hv);
+            if (j>=64) break;
+            fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
+            crc = crc32(0, Z_NULL, 0);
+            if (fcs!=crc32(crc, rx_buf_, cnt-4)) {
+                smac_cnt_[j][1]++;
+            }
+            smac_cnt_[j][0]++;
+            //printf("smac_cnt_[%d][0]=%d, cnt=%d\n", j, smac_cnt_[j][0], cnt);
+            
+            if (!hv) {
+                smac_nm_ = j+1;
+                memcpy(smac_[j], rbuf->srcMac, 6);
+                printf("%02X:%02X:%02X:%02X:%02X:%02X\n", smac_[j][0], smac_[j][1], smac_[j][2], smac_[j][3], smac_[j][4], smac_[j][5]);
+            }
+            if (!g_doIt) break;
+            //if (n++>50) break;
+        }
+    }
+    printf("smac_nm_=%d\n", smac_nm_);
+    for (int i=0; i<smac_nm_; i++) {
+        printf("%02X:%02X:%02X:%02X:%02X:%02X [%d/%d]\n", smac_[i][0], smac_[i][1], smac_[i][2], smac_[i][3], smac_[i][4], smac_[i][5], smac_cnt_[i][0], smac_cnt_[i][1]);
+    }
+}
+
+/*!
+Swap bytes order -- endianness
+
+    Input:  nh -- 0=Host2Net, 1=Net2Host
+            type -- 0=Para4Scnet, 1=Debug4Scnet 
+    Output: par --
+*/
+void CommuForScnet::SwapBytes(void *pnt, int nh, int type)
+{
+    if (type==1) {
+            Debug4Scnet *par = (Debug4Scnet *)pnt;
+            if (nh) {
+                for (int i=0; i<8; i++) {
+                    par->dbg16[i] = ntohs(par->dbg16[i]);
+                    par->dbg32[i] = ntohl(par->dbg32[i]);
+                }
+                for (int i=0; i<3; i++) {
+                    par->pwrsply[i] = ntohl(par->pwrsply[i]);
+                }
+            } else {
+                for (int i=0; i<8; i++) {
+                    par->dbg16[i] = htons(par->dbg16[i]);
+                    par->dbg32[i] = htonl(par->dbg32[i]);
+                }
+                for (int i=0; i<3; i++) {
+                    par->pwrsply[i] = htonl(par->pwrsply[i]);
+                }
+            }
+    } else {
+            Para4Scnet *par = (Para4Scnet *)pnt;
+            if (nh) {
+                for (int i=0; i<4; i++) {
+                    par->adc_dc[i] = ntohs(par->adc_dc[i]);
+                    par->corr[i] = ntohl(par->corr[i]);
+                }
+                for (int i=0; i<2; i++) {
+                    par->trns_rto[i] = ntohl(par->trns_rto[i]);
+                    par->cvt_c1c2[i] = ntohl(par->cvt_c1c2[i]);
+                }
+                par->cvt_prl_res = ntohs(par->cvt_prl_res);
+                par->app_id = ntohs(par->app_id);
+            } else {
+                for (int i=0; i<4; i++) {
+                    par->adc_dc[i] = htons(par->adc_dc[i]);
+                    par->corr[i] = htonl(par->corr[i]);
+                }
+                for (int i=0; i<2; i++) {
+                    par->trns_rto[i] = htonl(par->trns_rto[i]);
+                    par->cvt_c1c2[i] = htonl(par->cvt_c1c2[i]);
+                }
+                par->cvt_prl_res = htons(par->cvt_prl_res);
+                par->app_id = htons(par->app_id);
+            }
+    }
 }
 
 /*!
@@ -618,252 +869,4 @@ int CommuForScnet::Upgrade(const char *filename, const uint8_t *mac, uint16_t cm
     DebugCmd(0, mac);
     DebugCmd(0);
     return retv;
-}
-
-/*!
-Batch set the parameters of several devices
-
-    Input:  scnet -- uint8_t[4]. [0-3]:channel1-4. 0=needn't set, 1=need set
-            ratio -- uint32_t[4][2]. [0-3]:channel1-4; [0-1]:primary,secondary. unit:V/A
-            mac -- uint8_t[4][3]. [0-3]:channel1-4; [0-2]:25-48bit of mac
-            c1c2 -- float[3][2]. [0-2]:A-C; [0-1]:C1,C2
-            rllc --
-    Retrun: <0=failure
-*/
-int CommuForScnet::BatchSet(const uint8_t *scnet, const uint32_t *ratio, const uint8_t *mac, const float *c1c2, uint16_t rllc)
-{
-    uint8_t scnet_mac[6] = {0xB0, 0xE0, 0x14};
-    int retv = 0;
-    uint32_t cx[2];
-
-    DebugCmd(1);
-    msSleep(100);
-    for (int i=0; i<4; i++) {
-        //printf("%d; %d:%d; %x-%x-%x %f,%f %d\n", scnet[i], ratio[2*i], ratio[2*i+1], mac[3*i], mac[3*i+1], mac[3*i+2], c1c2[2*i], c1c2[2*i+1], rllc);
-        int up = 0;
-        if (scnet[i]) {
-            memcpy(&scnet_mac[3], &mac[3*i], 3);
-            retv = DebugCmd(1, scnet_mac);
-            if (retv<0) continue;
-            retv = GetParam(NULL, scnet_mac);
-            //printf("trns_rto=%d,%d\n", par4scnet_.trns_rto[0], par4scnet_.trns_rto[1]);
-            if ( ratio[2*i] && ratio[2*i+1] ) {
-                if ( memcmp(par4scnet_.trns_rto, &ratio[2*i], 8) ) {
-                    memcpy(par4scnet_.trns_rto, &ratio[2*i], 8);
-                    //printf("trns_rto=%d,%d\n", par4scnet_.trns_rto[0], par4scnet_.trns_rto[1]);
-                    up++;
-                }
-            }
-            if (i<3) {
-                if (c1c2[i*2] && c1c2[2*i+1]) {
-                    memcpy(cx, &c1c2[i*2], sizeof(cx));
-                    if ( memcmp(par4scnet_.cvt_c1c2, cx, 8) ) {
-                        memcpy(par4scnet_.cvt_c1c2, cx, 8);
-                        up++;
-                    }
-                }
-                if ( rllc && rllc != par4scnet_.cvt_prl_res ) {
-                    par4scnet_.cvt_prl_res = rllc;
-                    up++;
-                }
-            }
-            if (up) {
-                retv = SetParam(NULL, scnet_mac);
-            }
-            DebugCmd(0, scnet_mac);
-        }
-    }
-    DebugCmd(0);
-    return retv;
-}
-
-/*!
-Swap bytes order -- endianness
-
-    Input:  nh -- 0=Host2Net, 1=Net2Host
-            type -- 0=Para4Scnet, 1=Debug4Scnet 
-    Output: par --
-*/
-void CommuForScnet::SwapBytes(void *pnt, int nh, int type)
-{
-    if (type==1) {
-            Debug4Scnet *par = (Debug4Scnet *)pnt;
-            if (nh) {
-                for (int i=0; i<8; i++) {
-                    par->dbg16[i] = ntohs(par->dbg16[i]);
-                    par->dbg32[i] = ntohl(par->dbg32[i]);
-                }
-                for (int i=0; i<3; i++) {
-                    par->pwrsply[i] = ntohl(par->pwrsply[i]);
-                }
-            } else {
-                for (int i=0; i<8; i++) {
-                    par->dbg16[i] = htons(par->dbg16[i]);
-                    par->dbg32[i] = htonl(par->dbg32[i]);
-                }
-                for (int i=0; i<3; i++) {
-                    par->pwrsply[i] = htonl(par->pwrsply[i]);
-                }
-            }
-    } else {
-            Para4Scnet *par = (Para4Scnet *)pnt;
-            if (nh) {
-                for (int i=0; i<4; i++) {
-                    par->adc_dc[i] = ntohs(par->adc_dc[i]);
-                    par->corr[i] = ntohl(par->corr[i]);
-                }
-                for (int i=0; i<2; i++) {
-                    par->trns_rto[i] = ntohl(par->trns_rto[i]);
-                    par->cvt_c1c2[i] = ntohl(par->cvt_c1c2[i]);
-                }
-                par->cvt_prl_res = ntohs(par->cvt_prl_res);
-                par->app_id = ntohs(par->app_id);
-            } else {
-                for (int i=0; i<4; i++) {
-                    par->adc_dc[i] = htons(par->adc_dc[i]);
-                    par->corr[i] = htonl(par->corr[i]);
-                }
-                for (int i=0; i<2; i++) {
-                    par->trns_rto[i] = htonl(par->trns_rto[i]);
-                    par->cvt_c1c2[i] = htonl(par->cvt_c1c2[i]);
-                }
-                par->cvt_prl_res = htons(par->cvt_prl_res);
-                par->app_id = htons(par->app_id);
-            }
-    }
-}
-
-/*!
-Send debug command
-
-    Input:  cmdn -- command number. 1=Switch to debug mode, 2=clear debug information, 3=get debug information
-                    other=Return to working mode.
-            mac -- The MAC address of the scnet. NULL=group mac
-    Return:  <0=failure
-*/
-int CommuForScnet::DebugCmd(uint8_t cmdn, const uint8_t *mac)
-{
-    CrtlMacFrame tbuf;
-    uint8_t gmac = 0;
-    if (mac) {
-        if (CheckMacAddr(mac)) return -1;
-        memcpy(tbuf.desMac, mac, 6);
-    } else { 
-        memcpy(tbuf.desMac, kGroupMac, 6);
-        gmac = 1;
-        printf("Debug command %d is send to %02X:%02X:%02X:%02X:%02X:%02X\n", cmdn, 
-               tbuf.desMac[0], tbuf.desMac[1], tbuf.desMac[2], tbuf.desMac[3], tbuf.desMac[4], tbuf.desMac[5]);
-    }
-    memcpy(tbuf.srcMac, src_mac_, 6);
-    tbuf.ethertype = htons(eth_type_);
-    tbuf.length = htons(sizeof(Debug4Scnet)+4);
-    tbuf.cmd = htons(kDebug);
-    tbuf.res[0] = cmdn;
-    memcpy(&tbuf.data.dbg_inf, &dbg4scnet_, sizeof(dbg4scnet_));
-    SwapBytes(&tbuf.data.dbg_inf, 0, 1);
-    
-    uint8_t *pbuf = (uint8_t *)&tbuf;
-    uint32_t crc = crc32(0, Z_NULL, 0);
-    crc = crc32(crc, pbuf, sizeof(Debug4Scnet)+20);
-    memcpy(&pbuf[sizeof(Debug4Scnet)+20], &crc, 4);
-
-    int retv = -1, i, cnt;
-    CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
-    for (i=0; i<3; i++) {
-        sendto(socket_fd_, &tbuf, sizeof(Debug4Scnet)+24, 0, (struct sockaddr*)sock_ll_, sizeof(sockaddr_ll));
-        if (gmac) break;
-        StopWatch(0, 1, NULL);
-        if (!mac) {
-            msSleep(100);
-            retv = 0;
-            break;
-        }
-        for (;;) {
-            cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
-            if(cnt>0) {
-                if (ntohs(rbuf->ethertype)!=eth_type_) {
-                } else if (!memcmp(mac, rbuf->srcMac, 6) && ntohs(rbuf->cmd)==kDebug) {
-                    uint32_t fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
-                    crc = crc32(0, Z_NULL, 0);
-                    if (fcs==crc32(crc, rx_buf_, cnt-4)) {
-                        StopWatch(0, 0, NULL);
-                        printf("Debug command send succeed >> %02X:%02X:%02X:%02X:%02X:%02X; time=%6.3fms\n", 
-                                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], stopwatch_dur(0)*1000);
-                        if (cmdn==3) {
-                            Debug4Scnet *par = &dbg4scnet_;
-                            memcpy(par, &rbuf->data.dbg_inf, sizeof(dbg4scnet_));
-                            SwapBytes(par, 1, 1);
-                            printf("DMA2_Stream0_IRQHandler():\n");
-                            printf("  dbg16[0-3]=%05d %05d %05d %05d\n", par->dbg16[0], par->dbg16[1], par->dbg16[2], par->dbg16[3]);
-                            printf("CVTHandle():\n");
-                            printf("  fifo_idc_[c1,c2].dc=%d,%d; c1(max/min)=%d/%d\n", par->dbg16[4], par->dbg16[5], par->dbg16[6], par->dbg16[7]);
-                            printf("  udc(current/max/min)=%d/%d/%d; smp_pns=%d\n", par->dbg32[0], par->dbg32[1], par->dbg32[2], par->dbg32[3]);
-                            printf("  fifo_idc_[c1,c2].sum=%d,%d\n", par->dbg32[4], par->dbg32[5]);
-                            printf("  fifo_udc_.sum=%13lld\n", par->dbg64[0]);
-                            float di[3];
-                            for (int i=0; i<3; i++) di[i] = par->pwrsply[i]; 
-                            printf("Power supply(V) ADC_Read():\n");
-                            printf("  min/avg/max=%g/%g/%g\n", di[0]/1000, di[1]/1000, di[2]/1000);
-                        }
-                        retv = 0;
-                        break;
-                    }
-                }
-            }
-            StopWatch(0, 0, NULL);
-            if (stopwatch_dur(0)>1) break;
-        }
-        if (!retv) break;
-        else printf("Debug command send failure!\n");
-    }
-    return retv;   
-}
-
-extern bool g_doIt;
-static uint8_t smac_[64][6];
-static uint8_t smac_nm_ = 0;
-static uint32_t smac_cnt_[64][2];   //[0-1]:total count, error count
-/*!
-Sniffing MAC source address
-*/
-void CommuForScnet::Sniff()
-{
-    int cnt;
-    uint32_t crc, fcs;
-    CrtlMacFrame *rbuf = (CrtlMacFrame *)rx_buf_;
-    printf ("Hit ^c to exit ... \n");
-    memset(smac_cnt_, 0, sizeof(smac_cnt_));
-    int n = 0;
-    for (;;) {
-        cnt = recvfrom(socket_fd_, rx_buf_, sizeof(rx_buf_), 0, NULL, NULL);
-        if(cnt>0) {
-            int j, hv = 0;
-            for (j=0; j<smac_nm_; j++) {
-                if (!memcmp(smac_[j], rbuf->srcMac, 6)) {
-                    hv = 1;
-                    break;
-                }
-            }
-            //printf("j=%d, hv=%d\n", j, hv);
-            if (j>=64) break;
-            fcs = *(uint32_t *)(&rx_buf_[cnt-4]);
-            crc = crc32(0, Z_NULL, 0);
-            if (fcs!=crc32(crc, rx_buf_, cnt-4)) {
-                smac_cnt_[j][1]++;
-            }
-            smac_cnt_[j][0]++;
-            
-            if (!hv) {
-                smac_nm_ = j+1;
-                memcpy(smac_[j], rbuf->srcMac, 6);
-                printf("%02X:%02X:%02X:%02X:%02X:%02X\n", smac_[j][0], smac_[j][1], smac_[j][2], smac_[j][3], smac_[j][4], smac_[j][5]);
-            }
-            if (!g_doIt) break;
-            //if (n++>50) break;
-        }
-    }
-    printf("smac_nm_=%d\n", smac_nm_);
-    for (int i=0; i<smac_nm_; i++) {
-        printf("%02X:%02X:%02X:%02X:%02X:%02X [%d/%d]\n", smac_[i][0], smac_[i][1], smac_[i][2], smac_[i][3], smac_[i][4], smac_[i][5], smac_cnt_[i][0], smac_cnt_[i][1]);
-    }
 }

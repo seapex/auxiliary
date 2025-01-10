@@ -27,8 +27,8 @@ set_property(TARGET ${EXE_TARGET} PROPERTY LINK_FLAGS -static-libgcc)
 #              ${PROJECT_BINARY_DIR}/bin )
 
 add_custom_command(TARGET ${EXE_TARGET} POST_BUILD 
-  COMMAND cp ${PROJECT_BINARY_DIR}/ntpclient/${EXE_TARGET} ${CMAKE_HOME_DIRECTORY}/release -a
-  COMMENT "Copy ${EXE_TARGET} to ${CMAKE_HOME_DIRECTORY}/release/" )
+  COMMENT "Copy ${EXE_TARGET} to ${CMAKE_HOME_DIRECTORY}/release/ntpclient/"
+  COMMAND cp ${PROJECT_BINARY_DIR}/ntpclient/${EXE_TARGET} ${CMAKE_HOME_DIRECTORY}/release/ntpclient/ -a )
 
 # add the install targets
 install (TARGETS ${EXE_TARGET} DESTINATION bin)

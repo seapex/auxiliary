@@ -63,7 +63,7 @@ int main (int argc, char *argv[])
             }
             break;
         case kBatchSet:
-            commu.BatchSet(parse_opt.scnet(), parse_opt.trns_rto(), parse_opt.bset_mac(), parse_opt.c1c2(), parse_opt.rllc());
+            commu.BatchSet(parse_opt.bset_par());
             parse_opt.clr_bset_par();
             break;
         default:

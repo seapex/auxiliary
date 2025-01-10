@@ -15,7 +15,7 @@ public:
     int Pop(T * data);
     T *Pop();
     
-    T* Read(int idx);
+    T* Read(int idx=0);
     int Read(T * data);
     void rRead(T * data);
     void GetTrash(T * data) { memcpy(data, &trash_, sizeof(T)); }
@@ -92,7 +92,7 @@ int LoopBuffer<T>::Push(const T * data)
     Return: NULL=buffer be empty
 */
 template <class T>
-T* LoopBuffer<T>::Read(int idx=0)
+T* LoopBuffer<T>::Read(int idx)
 {
     if (idx>=data_num_) return NULL;
     T *ptemp = buffer_ + (tail_+idx & buf_size_-1);

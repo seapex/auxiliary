@@ -8,8 +8,8 @@
  *  it under the terms of the GNU General Public License (Version 2,
  *  June 1991) as published by the Free Software Foundation.  At the
  *  time of writing, that license was published by the FSF with the URL
- *  http://www.gnu.org/copyleft/gpl.html, and is incorporated herein by
- *  reference.
+ *  https://www.gnu.org/licenses/old-licenses/gpl-2.0.html, and is
+ *  incorporated herein by reference.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of

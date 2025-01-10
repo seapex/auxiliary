@@ -13,7 +13,7 @@ enum kDFilterType {
 
 class DigitalFilter
 {
-    void RefreshPara(int idx, int pari, float parf);
+    void RefreshPara(int idx, int par);
 
     struct {
         double a[8]; //coefficient a0~
@@ -26,7 +26,7 @@ class DigitalFilter
     } tmp_var_; //filter temporary variable
 
     int fltr_t_;    //filter type. kDFilterType
-    float omega_c_; //cut-off angular frequency. unit:Hz
+    int freq_c_; //cut-off frequency. unit:0.01Hz
     int smpl_rate_; //sampling rate. unit:Hz
     int low_high_;  //low or high pass. 0=low pass, 1=high pass
 
@@ -35,16 +35,16 @@ public:
     DigitalFilter();
     ~DigitalFilter(){};
     
-    int InitPara(int type, float wc, int rate, int lh);
+    int InitPara(int type, int wc, int rate, int lh);
     float SignalPass(float sv);
     
     //Accessors
-    //void print_para() { printf("%d,%g,%d,%d\n", fltr_t_, omega_c_, smpl_rate_, low_high_); printf("a[0-1]=%g,%g; b[1]=%g\n", cffcnt_.a[0], cffcnt_.a[1], cffcnt_.b[1]); }
+    //void print_para() { printf("%d,%g,%d,%d\n", fltr_t_, freq_c_, smpl_rate_, low_high_); printf("a[0-1]=%g,%g; b[1]=%g\n", cffcnt_.a[0], cffcnt_.a[1], cffcnt_.b[1]); }
     //Mutators
-    void set_fltr_t(int val) { if (val==fltr_t_) return; RefreshPara(0, val, 0); }
-    void set_omega_c(float val) { if (val==omega_c_) return; RefreshPara(1, 0, val); }
-    void set_smpl_rate(int val) { if (val==smpl_rate_) return; RefreshPara(2, val, 0); }
-    void set_low_high(int val) { if (val==low_high_) return; RefreshPara(3, val, 0); }
+    void set_fltr_t(int val) { if (val==fltr_t_) return; RefreshPara(0, val); }
+    void set_freq_c(int val) { if (val==freq_c_) return; RefreshPara(1, val); }
+    void set_smpl_rate(int val) { if (val==smpl_rate_) return; RefreshPara(2, val); }
+    void set_low_high(int val) { if (val==low_high_) return; RefreshPara(3, val); }
 };
 
 #endif // __DIGITAL_FILTER_H_

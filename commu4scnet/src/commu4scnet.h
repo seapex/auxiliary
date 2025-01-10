@@ -26,7 +26,7 @@ class CommuForScnet {
         uint8_t svtyp;      //SV type. 0=primary, 1=secondary
         uint8_t reserve[37];
         uint8_t des_mac[2]; //destination mac address. 00:00 ~ 01:FF
-        uint16_t app_id;    //APPID. 0x4000~0x7FFF
+        uint16_t app_id;    //APPID. 0x4000~0x7FFF. 0x6B0E=boyuu 9-2, 0xCB0E=boyuu customized
         uint8_t res2[34];
         uint8_t ver[2][3]; //firmware version. [0-1]:App,Bootloader
     } Para4Scnet;
@@ -87,7 +87,7 @@ class CommuForScnet {
     int GetParam(const char *filename, const uint8_t *mac);
     int MacPing(const uint8_t *mac, uint8_t echo=0);
     int Upgrade(const char *filename, const uint8_t *mac, uint16_t cmd, uint8_t fc=0);
-    int BatchSet(const uint8_t *chnl, const uint32_t *ratio, const uint8_t *mac, const float *c1c2, uint16_t rllc);
+    int BatchSet(const struct BatchSetParam *par);
     int DebugCmd(uint8_t cmdn, const uint8_t *mac=NULL);
     void Sniff();
 };

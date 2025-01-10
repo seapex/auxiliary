@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 2.8)
-project (NtpClient)
+project (ToolKit)
 
 # The version number.
 set (_VERSION_MAJOR 1)

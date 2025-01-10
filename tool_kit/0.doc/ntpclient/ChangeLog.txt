@@ -1,4 +1,17 @@
 
+2024-12-17
+  1. 修改 meas_frq_err.sh
+  2. 删除 ntpclient.sh, 增加 start_ntpd.sh
+  3. 由于 ntpclient 不支持 IPv6，目前仅用于侦测系统时钟与ntp的误差
+  4. 增加 ntp_ipv4.lua
+
+2024-7-31
+  1. 修改 ntpclient.sh, 将
+	ntpclient -f $FreqErr -s -g 10000 -l -i $SyncCycle -h $Addr -t >/tmp/ntpclient.log &
+	改为:
+	ntpclient -f $FreqErr -s -g 10000 -i $SyncCycle -h $Addr -t >/tmp/ntpclient.log &
+    解决 开关机后系统时间跳变的问题.
+
 +--------- V1.0.1 --------------------+
 2019-12-07
   1. 修改 rfc1305print(), 将

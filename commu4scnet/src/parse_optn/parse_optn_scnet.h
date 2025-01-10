@@ -10,22 +10,28 @@
 enum SubCmdType { kBatchSet=1, kCmdTypeEnd };
 //enum MainCmdOptnType {  kSetMacAddr=2, kSetParam, kGetParam, kMacPackPing, kUpApp, kUpBoot };
 
+struct BatchSetParam {
+    uint8_t scnet[4];       //[0-3]:channel1-4. 0=needn't set, 1=need set
+    uint32_t trns_rto[4][2];    //[0-3]:channel1-4; [0-1]:primary,secondary. unit:V/A. value=0:not set
+    uint8_t mac[4][3];  //[0-3]:channel1-4; [0-2]:25-48bit of mac
+    float c1c2[4][2];   //[0-2]:A-C; [0-1]:C1,C2. value=0:not set
+    uint16_t rllc;      //Ratio of resistor impedance to capacitor reactance at 50Hz in RC parallel circute. value=0:not set
+    uint8_t svtype[4];     //[0-3]:channel1-4. 0=primary, 1=secondary, other=not set
+    uint16_t app_id;    //APPID. 0x4000~0x7FFF. 0x6B0E=boyuu 9-2, 0xCB0E=boyuu customized. value=0:not set
+};
+
 class ParseOptnScnet:public ParseOption {
 public:
     ParseOptnScnet();
     ~ParseOptnScnet(){};
 
     //Accessors
-    const uint8_t *bset_mac() { return &bset_par_.mac[0][0]; }
     uint8_t dbgcmd() { return dbgcmd_; }
-    const uint8_t *scnet() { return bset_par_.scnet; }
     const char *filename_cfg() { return pfile_cfg_; }
     uint8_t force() { return force_; }
     const uint8_t *mac(int idx) { return pmac_[idx]; }
     uint8_t mac_cmd() { return mac_cmd_; }
-    const uint32_t *trns_rto() { return &bset_par_.trns_rto[0][0]; }
-    const float *c1c2() { return bset_par_.c1c2[0]; }
-    uint16_t rllc() { return bset_par_.rllc; }
+    const BatchSetParam *bset_par() { return &bset_par_; }
     
     //Mutators
     void clr_bset_par() { memset(&bset_par_, 0, sizeof(bset_par_)); }
@@ -34,17 +40,10 @@ protected:
     int HandleSubcmd(int opt, char *arg);
     int HandleOther(char *arg);
 private:
-    int HandleBset(int opt);
-        
-    struct BatchSetParam {
-        uint8_t scnet[4];
-        uint32_t trns_rto[4][2];
-        uint8_t mac[4][3];
-        float c1c2[3][2];
-        uint16_t rllc;
-    } bset_par_;
-    
+    int HandleBset(int opt);        
     void InitParam();
+
+    BatchSetParam bset_par_;    
     char filename_cfg_[128];  //configure file name
     const char *pfile_cfg_;
     uint8_t mac_[2][6]; //Mac address.

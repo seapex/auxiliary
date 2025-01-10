@@ -33,7 +33,7 @@ const SquarePara sqr_par_[] = {
 };
 int sqr_type_ = 0;
 int smpl_rate_;
-int pst_x_[4][3];   //sampling point count.[0-3]:4channel, [0-2]:A-C phase
+uint32_t pst_x_[4][3];   //sampling point count.[0-3]:4channel, [0-2]:A-C phase
 
 FlickerStatis *flkr_statis_ = NULL;
 /*!
@@ -77,7 +77,7 @@ Simulative Pst data wave generator
 void PstWaveGen(int32_t *pbuf, int num, int chl, int phs, float amp, float dc)
 {
     double pow_freq = 50;
-    double m = sqr_par_[sqr_type_].amp/200;
+    double m = sqr_par_[sqr_type_].amp*1/200;
     double f = sqr_par_[sqr_type_].freq;
     double smpl_t = smpl_rate_;
     smpl_t = 1/smpl_t;
@@ -163,16 +163,16 @@ void TestAccuracy(int cnt, int phs, int type)
     int nums = smpl_rate_ / 5;  //Number of sampling points processed per round.
     int rounds = 60 * 5;    //Number of rounds per minute
     sqr_type_ = type;
-    
+    printf("nums=%d\n", nums);
     int32_t *wave = new int32_t[nums];
     //float *data = new float[nums];
     float *buf = new float[nums];
     StopWatch (0, 1, "accuracy:");
-    set_block2(1);
+    set_block2(0);
     for (int i=0; i<cnt; i++) {
         if (i%10==0) pst_x_[0][phs] = 0;
         for (int j=0; j<rounds; j++) {
-            PstWaveGen(wave, nums, 0, phs, 0000, -50000);
+            PstWaveGen(wave, nums, 0, phs, 10000, 0000);
             /*for (int k=0; k<nums; k++) {
                 data[k] = wave[k];
                 data[k] /= 100;
@@ -203,6 +203,7 @@ int main (int argc, char *argv[])
     } else if (cmd==kAccuracyTst) {
         int cnt;
         for (int i=0; i<7; i++) {
+        //for (int i=0; i<1; i++) {
             cnt = parse_opt.a_num();
             if (i==0) cnt += 10;
             TestAccuracy(cnt, 0, i);

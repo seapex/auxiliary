@@ -16,7 +16,7 @@
 /*!
 Send system control command
 
-    Input:  type -- command type. 1=quit, 2=cold reboot.
+    Input:  type -- command type. 1=quit, 2=cold reboot, 3=update
 */
 void SystemCtrl(int type)
 {

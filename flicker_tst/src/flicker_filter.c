@@ -7,7 +7,7 @@
 
 #include "flicker_filter.h"
 
-#define kChannelTol 4   //Total number of channel
+#define kChannelsTol 4   //Total number of channels
 
 /*!
 0.05~35HZ Band pass filter parameter
@@ -26,7 +26,7 @@ typedef struct {
 } BandTmpVar;    //bandpass filter temp variable
 typedef struct {
     BandConst con;
-    BandTmpVar var[kChannelTol][3];
+    BandTmpVar var[kChannelsTol][3];
 } BandPasFltrPara;
 #pragma DATA_SECTION(band_fltr_, ".data");
 static BandPasFltrPara band_fltr_;
@@ -45,7 +45,7 @@ typedef struct {
 } RCLowTmpVar;    //RC lowpass filter temp variable
 typedef struct {
     RCLowConst con;
-    RCLowTmpVar var[kChannelTol][3];
+    RCLowTmpVar var[kChannelsTol][3];
 } RCLpasFltrPara;
 #pragma DATA_SECTION(rc_fltr1_, ".data");
 static RCLpasFltrPara rc_fltr1_;   //27.3s for block1
@@ -65,7 +65,7 @@ typedef struct {
 } WeightTmpVar;     //Visual sensitivity filter temp variable
 typedef struct {
     WeightConst con;
-    WeightTmpVar var[kChannelTol][3];
+    WeightTmpVar var[kChannelsTol][3];
 } WghtFltrPara;
 #pragma DATA_SECTION(wght_fltr_, ".data");
 static WghtFltrPara wght_fltr_;
@@ -77,7 +77,7 @@ typedef struct {
     int16_t cnt;    //rms calculation interval count.
     int16_t zo_f_;  //Scaling factor to prevent numerical overflow
 } FIFO32;
-FIFO32 fifo_rms_[kChannelTol][3];   //FIFO for 5cycle rms calculation.
+FIFO32 fifo_rms_[kChannelsTol][3];   //FIFO for 5cycle rms calculation.
 FIFO32 *prms_;
 
 #pragma DATA_SECTION(avg_num_, ".data");
@@ -133,7 +133,7 @@ void IniFilterPar(int rate)
 		    wght_fltr_.con.a[4] = 0.00068043575;
     		wght_fltr_.con.b[1] = -3.880097;       wght_fltr_.con.b[2] = 5.6448073;
 	    	wght_fltr_.con.b[3] = -3.6491997;      wght_fltr_.con.b[4] = 0.8844899;
-		    rc_fltr4_.con.a = 0.0010406;  rc_fltr4_.con.b = -0.99792;  rc_fltr4_.con.K = 123;
+		    rc_fltr4_.con.a = 0.0010406;  rc_fltr4_.con.b = -0.99792;  rc_fltr4_.con.K = 120;
 		    avg_num_ = 40;
 		    smpl_rate_ = 1600;
             break;
@@ -175,8 +175,11 @@ void IniFilterPar(int rate)
             break;
     }
     rms_invr_ = smpl_rate_/100; //The rms is calculated every half period
-    rc_fltr1_.con.a = 1.8312E-04;  rc_fltr1_.con.b = -0.9996338;  rc_fltr1_.con.K = 1;  //27.3s at 100Hz
-    
+    //rc_fltr1_.con.a = 1.8312E-04;  rc_fltr1_.con.b = -0.9996338;  rc_fltr1_.con.K = 1;  //27.3s at 100Hz
+    //rc_fltr1_.con.a = 8.332638947E-05;  rc_fltr1_.con.b = -0.999833347;  rc_fltr1_.con.K = 1;  //60s at 100Hz
+    //rc_fltr1_.con.a = 5.555246931E-05;  rc_fltr1_.con.b = -0.999888895;  rc_fltr1_.con.K = 1;  //90s at 100Hz
+    rc_fltr1_.con.a = 4.166493063E-05;  rc_fltr1_.con.b = -0.99991667;  rc_fltr1_.con.K = 1;  //120s at 100Hz
+
     memset(rc_fltr1_.var, 0, sizeof(rc_fltr1_.var));
     memset(band_fltr_.var, 0, sizeof(band_fltr_.var));
     memset(wght_fltr_.var, 0, sizeof(wght_fltr_.var));
@@ -234,6 +237,7 @@ void PreFilter(float *des, const int32_t *src, int cnt, RCLowTmpVar *tvr, int sm
         }
         des[i] = src[i];
         des[i] = des[i]/rms/(1<<prms_->zo_f_);
+        //printf("%f, ", rms);
         switch (nz) {
             case 1:     //x^2. for AC & DC
                 des[i] *= des[i];
@@ -370,7 +374,7 @@ Flicker filter
 
     Input:  src -- sampling value
             cnt -- Number of SV of src
-            cdx -- channel index. 0-
+            cdx -- channels index. 0-
             phs -- phase, 0~2=A~C
             frq -- Power frequency, unit:Hz
     Output: des -- Average instantaneous flicker value
