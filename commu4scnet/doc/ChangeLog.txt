@@ -1,4 +1,7 @@
 
++--------- V1.4.9 --------------------+
+2025-04-23
+  1. 修改 CommuForScnet::InitSock4Eth() 等, 用 bind() 函数将 socket_fd_ 与指定以太网口绑定在一起。
 +--------- V1.4.8 --------------------+
 2024-12-26
   1. 修改 ParseOptnScnet, CommuForScnet::BatchSet() 等, batch 命令增加 svtype 和 appid 参数设置，并优化相关代码。

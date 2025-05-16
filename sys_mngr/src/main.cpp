@@ -76,9 +76,6 @@ int main(int argc, char *argv[])
 
     TimeCstInit();
     switch (cmd) {
-        case kWTDClose:
-            watchdog().Disable();
-            break;
         case kMnQuit:
         case kMnColdboot:
             SystemCtrl(cmd);
@@ -93,13 +90,24 @@ int main(int argc, char *argv[])
             msSleep(2000);
             system("reboot");
             break;
-        case kForceBoot:
-            watchdog().Enable(1);
+        case kWTDClose:
+            watchdog().Disable();
             break;
+        case kForceBoot:
+            watchdog().Enable(5);
         default:
             break;
     }
     TimeCstEnd();
+
+    switch (cmd) {
+        case kForceBoot:
+            printf("Force booting...\n");
+            watchdog().Feed();
+            while(1);
+        default:
+            break;
+    }    
 }
 
 

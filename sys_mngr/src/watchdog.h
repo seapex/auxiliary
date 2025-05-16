@@ -14,50 +14,41 @@ public:
     WatchDog(){
         fd_ = 0;
     };
-    ~WatchDog(){};
+    ~WatchDog(){
+        Close();
+    };
 
     /*! \brief Feed watchdog
      Sends an IOCTL to the driver, which in turn ticks the PC Watchdog card 
      to reset its internal timer so it doesn't trigger a computer reset.
     */
     void Feed() {
-        fd_ = Open();
         if (!fd_) return;
         int dummy;
         ioctl(fd_, WDIOC_KEEPALIVE, &dummy);
-        Close();
     };
     void Enable(int secs=60) {
-        fd_ = Open();
-        if (!fd_) return;
-#if 1
-#else   //AM335x driver not support below
-        int rslt = OnOff(WDIOS_ENABLECARD);
-	    if (rslt<0) printf("Enable watchdog failure!\n");
-	    else printf("Watchdog device enabled.\n");
-#endif
+        if(!fd_) {
+            fd_ = Open();
+            if (!fd_) return;
+        }
+        GetTimeout();
+        int flag = WDIOS_ENABLECARD;
+        ioctl(fd_, WDIOC_SETOPTIONS, &flag);
         SetTimeout(secs);
-        Close();
     };
     void Disable() {
-        fd_ = Open();
-        if (!fd_) return;
-#if 1
-        SetTimeout(86400);  //86400(1day) is max value can be set.
-#else   //AM335x driver not support below
-        int rslt = OnOff(WDIOS_DISABLECARD);
-	    if (rslt<0) printf("Disable watchdog failure!\n");
-	    else printf("Watchdog device enabled\n");
-#endif
-        Close();
+        if (!fd_) fd_ = Open();
+        SetTimeout(86400);  //86400s(1day) is max value can be set.
+        int flag = WDIOS_DISABLECARD;
+        ioctl(fd_, WDIOC_SETOPTIONS, &flag);
 	};
     
 protected:
 private:
 	int fd_;
 	int Open() {
-       int fd = open("/dev/watchdog", O_WRONLY);
-
+        int fd = open("/dev/watchdog", O_WRONLY);
         if (fd == -1) {
         	fprintf(stderr, "Watchdog device not opened\n");
         	fflush(stderr);
@@ -72,11 +63,14 @@ private:
             //printf("Watchdog device stopped\n");
         }
 	};
-	int OnOff(int flag) {
-        fd_ = Open();
-        if (!fd_) return -1;
-	    return ioctl(fd_, WDIOC_SETOPTIONS, &flag);
-	};
+    int GetTimeout() {
+        if(!fd_) return 0;
+        int secs;
+        int rslt = ioctl(fd_, WDIOC_GETTIMEOUT, &secs); 
+        if (rslt<0) printf("GetTimeout error %d\n", rslt);
+        else printf("Watchdog timeout is %ds\n", secs);
+        return secs;
+    };
     void SetTimeout(int secs) {
         if(!fd_) return; 
         int rslt = ioctl(fd_, WDIOC_SETTIMEOUT, &secs); 

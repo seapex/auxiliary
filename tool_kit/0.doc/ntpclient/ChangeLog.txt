@@ -29,4 +29,3 @@
 	if (ntpc->set_clock||abs(skew1-skew2)/2>ntpc->skew_set*1000) {
   3. 命令行输入选项增加 '-k', 用于设定 skew_set.
 
- 

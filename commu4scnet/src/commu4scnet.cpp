@@ -31,14 +31,8 @@ static const char *DeviceModelStr[] = {"PQNet103D", "PQNet204D", "PQNet202CVT", 
 
 CommuForScnet::CommuForScnet()
 {
-    if (OpenSocket()<0) exit(-1);
+    if (InitSock4Eth()<0) exit(-1);
     
-    sock_ll_ = new sockaddr_ll;
-  	memset(sock_ll_, 0, sizeof(sockaddr_ll));
-    if (GetLocalMac(src_mac_, &sock_ll_->sll_ifindex, "eth1")<0) {
-    //if (GetLocalMac(src_mac_, &sock_ll_->sll_ifindex, "enp0s3")<0) {
-        exit(-1);
-    }
     eth_type_ = 0xB0E0;
     
     //printf("sizeof(Para4Scnet)=%d\n", sizeof(Para4Scnet));
@@ -299,6 +293,40 @@ int CommuForScnet::GetParam(const char *filename, const uint8_t *mac)
 }
 
 /*!
+Initialize socket for ethernet
+
+    Return: 0=success, <0=failure
+*/
+int CommuForScnet::InitSock4Eth()
+{
+    socket_fd_ = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if(socket_fd_ < 0) {
+        perror("socket");
+	    return -1;
+    }
+  	//fcntl(socket_fd_, F_SETFL, O_NONBLOCK);     //Set read & write to no block
+
+    int ifidx;
+    if (GetLocalMac(src_mac_, &ifidx, "eth1")<0) {
+        return -2;
+    }
+
+    //bind socket to the interface eth1
+    sock_ll_ = new sockaddr_ll;
+  	memset(sock_ll_, 0, sizeof(sockaddr_ll));
+    sock_ll_->sll_hatype = ARPHRD_ETHER; //ethernet
+    sock_ll_->sll_pkttype = PACKET_HOST; //packet destined for this machine
+    sock_ll_->sll_family = AF_PACKET;
+    sock_ll_->sll_ifindex = ifidx;  //interface index
+    sock_ll_->sll_protocol = htons(ETH_P_ALL); // capture all ethernet frames
+    if (bind(socket_fd_, (struct sockaddr *)sock_ll_, sizeof(sockaddr_ll)) < 0) {
+        perror("bind");
+        return -3;
+    }
+    return 0;
+}
+
+/*!
 Load parameter from configuration file
 
     Input:  filename -- The configuration file used to store the parameters
@@ -447,18 +475,6 @@ int CommuForScnet::MacPing(const uint8_t *mac, uint8_t echo)
         else if (echo) printf("Destination Host Unreachable!\n");
     }
     return retv;
-}
-
-int CommuForScnet::OpenSocket()
-{
-
-    socket_fd_ = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if(socket_fd_ < 0) {
-        perror("socket");
-	    return -1;
-    }
-  	//fcntl(socket_fd_, F_SETFL, O_NONBLOCK);     //Set read & write to no block
-    return 0;
 }
 
 /*!

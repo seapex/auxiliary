@@ -70,7 +70,7 @@ class CommuForScnet {
     Debug4Scnet dbg4scnet_;
 #pragma pack()
 
-    int OpenSocket();
+    int InitSock4Eth();
     int GetLocalMac(uint8_t *mac, int *idx, const char *name);
     int CheckMacAddr(const uint8_t *mac);
     void SaveParam(const char *filename, Para4Scnet *par);

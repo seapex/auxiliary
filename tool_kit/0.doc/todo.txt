@@ -1,2 +1,0 @@
-
-adjtimex 可以删掉，busybox 就有
